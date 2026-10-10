@@ -579,3 +579,81 @@ recorded as a hypothesis for other data, not as a finding.
 
 **Reading:** with short interest aligned to when it becomes public, nothing lines up with the spread or with large
 moves in this window; the power to detect anything below |ρ| ≈ 0.41 is very low.
+
+---
+
+## 2026-10-10 15:18 CEST — Phase 5 pre-registration: joint block bootstrap (written BEFORE computing)
+
+**Type:** simulation. No new attempt on real data: IS backtest counter stays at 11, OOS access counter at 1.
+Simulations are counted separately: **simulation runs: 1 (500 paths)** once executed.
+
+**Why a block bootstrap and not an Ornstein–Uhlenbeck process.** The brief suggests simulating the spread as an OU
+process when Phase 2 indicates mean reversion. Ours indicates the opposite (IS Engle–Granger p = 0.975, half-life
+≈ 6,700 trading days ≈ 27 years; OOS EG p = 0.60). An OU calibrated on this spread would either be close to a random
+walk or impose a mean reversion the data reject. The joint block bootstrap makes no assumption of mean reversion and
+keeps the daily joint behaviour of the two stocks.
+
+**Design (fixed now).**
+- Data: daily **log** returns of INTC and AMD over the full history 1980-03-17 … 2026-10-09 (11,736 returns;
+  legitimate, the OOS has already been used).
+- Joint **moving block** bootstrap: block length **20** trading days; each block starts at a uniformly random day among
+  all valid starts (overlapping blocks allowed); the **same block of dates** is used for both stocks, so the daily
+  correlation is preserved. Blocks are concatenated and the last one truncated to the real length.
+  **500 paths, seed 2026**, path length = real history. Prices are rebuilt from the real prices of 1980-03-17 as
+  `P_0 · exp(cumsum(log returns))`; the real dates are used as labels only.
+- On every path, exactly the Phase 2 procedure: split at the **same position as the real split** (day index 8,273
+  of 11,737, i.e. 70.5%, so IS/OOS lengths match the real ones and Sharpe ratios are comparable); β by OLS on log
+  prices of the simulated IS; Engle–Granger test on the simulated IS; main configuration e = 2.0, L = 60, `shift(1)`,
+  5 bp per leg on the simulated IS (evaluation from the first day with an L = 120 z-score, as in Phase 2) and on the
+  simulated OOS with β frozen (z-score warm-up from the last IS days, starting flat).
+- Computation run once; the per-path table is saved to `data/processed/simulation_paths.pkl` with its parameters
+  (seed, block length, number of paths, split index); the notebook reloads it and recomputes only if the parameters
+  differ.
+
+**Interpretation (declared now).**
+1. The bootstrap keeps the daily correlation but destroys any long-run link beyond 20 days: the paths represent the
+   hypothesis "two correlated stocks **without** a stable relationship". If the real Sharpe cannot be distinguished
+   from this distribution, the behaviour of the real pair is compatible with the absence of a relationship.
+2. The bootstrap also keeps each stock's average drift, so the long-run trend of the ratio (AMD's average
+   outperformance over the full history) is preserved on average; what is lost is the order in which things happened.
+3. Any very short-term mean reversion within a 20-day block survives, but the strategy works on a longer horizon
+   (L = 60, average trade ≈ 45 days), exactly the scale that the bootstrap reshuffles.
+4. A real Sharpe in the **lower** tail would mean the real pair did worse than correlated stocks with no relationship,
+   e.g. because of persistent trends in the real spread.
+
+**Outputs:** distribution of the net Sharpe on simulated IS and OOS; share of paths with Sharpe > 0; percentile of the
+real net Sharpe (Phase 2: −0.27 IS; OOS access #1: −0.18; exact unrounded values recomputed with the same code) in
+those distributions; distribution of the Engle–Granger p-value across paths (and share with p < 0.05), compared with
+the real IS value 0.975.
+
+---
+
+## 2026-10-10 15:35 CEST — Phase 5 results: joint block bootstrap (design as pre-registered at 15:18)
+
+**Simulation runs: 1 (500 paths).** IS backtest counter 11 and OOS access counter 1, unchanged.
+**Code:** `src/pairs/simulation.py`, `scripts/run_simulation.py` (single run: 500 paths in 735 s, 15:20–15:32 CEST);
+tests in `tests/test_simulation.py` (incl. same dates for both stocks). **Checkpoint:**
+`data/processed/simulation_paths.pkl` (parameters + data fingerprint stored). **Notebook:** `notebooks/05_simulation.ipynb`
+(reloads the checkpoint; path 0 regenerated and checked against it). **Figures:** `reports/figures/05a_sharpe_bootstrap_vs_real`,
+`05b_eg_pvalue_bootstrap_vs_real`, `05c_ratio_paths_bootstrap_vs_real` (.png/.html).
+
+Real reference values recomputed with the same code: net Sharpe IS −0.2718, OOS −0.1806; Engle–Granger p IS 0.9752.
+
+| | simulated IS net Sharpe | simulated OOS net Sharpe | simulated IS Engle–Granger p |
+|---|---|---|---|
+| median | 0.058 | 0.036 | 0.534 |
+| 5th / 95th percentile | −0.217 / 0.321 | −0.388 / 0.461 | 0.046 / 0.975 |
+| share of paths > 0 | 63.6% | 54.4% | — |
+| share of paths with p < 0.05 | — | — | 5.2% |
+| real value | −0.272 | −0.181 | 0.975 |
+| **percentile of real** | **2.8%** | **21.0%** | **94.8%** |
+
+Other descriptive numbers (same paths): simulated-IS β median 0.683, β ≤ 0.1 on 11.0% of paths (≤ 0 on 9.4%);
+correlation between simulated IS and OOS Sharpe 0.031; median trades 128 (IS) / 55 (OOS).
+
+**Reading:** in a world of correlated stocks without a stable relationship the strategy's Sharpe is scattered around a
+slightly positive value and IS does not predict OOS. The real OOS Sharpe is well inside that distribution (21st
+percentile); the real IS Sharpe is in its lower tail (2.8th percentile), consistent with persistent multi-year trends in
+the real static-β spread (Phase 3: spread ≈ short AMD position) that the 20-day blocks do not preserve. The Engle–Granger
+test rejects at about its nominal rate under the null (5.2%), and the real p-value is high even by the null's standards.
+The percentiles are descriptive, not pre-registered hypothesis tests.

@@ -1,1 +1,238 @@
-"""Phase 5: simulated paths of the pair and re-run of the Phase 2 signal on each path."""
+"""Phase 5: joint block bootstrap of the pair and re-run of the Phase 2 signal on each path."""
+
+from __future__ import annotations
+
+import logging
+import math
+import pickle
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from pairs.backtest import run_strategy
+from pairs.config import TICKER_A, TICKER_B
+from pairs.metrics import performance_summary
+from pairs.spread import fit_hedge_ratio, log_prices, stationarity_tests
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BootstrapParams:
+    """Pre-registered parameters of the Phase 5 simulation (EXPERIMENTS.md, 15:18 CEST).
+
+    Attributes
+    ----------
+    block : int
+        Block length in trading days.
+    n_paths : int
+        Number of simulated paths.
+    seed : int
+        Seed of the random generator.
+    split_index : int
+        Row of the first simulated OOS day (same position as the real split).
+    entry, lookback, cost_bps, lag : float, int, float, int
+        Phase 2 main configuration.
+    is_warmup : int
+        The simulated IS is evaluated from row ``is_warmup − 1`` (first L = 120 z-score day).
+    """
+
+    block: int = 20
+    n_paths: int = 500
+    seed: int = 2026
+    split_index: int = 8273
+    entry: float = 2.0
+    lookback: int = 60
+    cost_bps: float = 5.0
+    lag: int = 1
+    is_warmup: int = 120
+
+
+def bootstrap_indices(n_returns: int, block: int, rng: np.random.Generator) -> np.ndarray:
+    """Row indices of one moving-block bootstrap path.
+
+    Parameters
+    ----------
+    n_returns : int
+        Number of historical daily returns (and of returns in the path).
+    block : int
+        Block length.
+    rng : np.random.Generator
+        Random generator (advanced in place).
+
+    Returns
+    -------
+    np.ndarray
+        Integer array of length ``n_returns``: concatenated runs ``start, start+1, …,
+        start+block−1`` with ``start`` uniform on ``[0, n_returns − block]``; the last run is
+        truncated.
+
+    Notes
+    -----
+    The same indices are applied to both stocks, so each simulated day takes the returns of
+    INTC and AMD from the *same* historical date.
+    """
+    assert 0 < block <= n_returns
+    n_blocks = math.ceil(n_returns / block)
+    starts = rng.integers(0, n_returns - block + 1, size=n_blocks)
+    idx = (starts[:, None] + np.arange(block)[None, :]).ravel()[:n_returns]
+    assert len(idx) == n_returns and idx.min() >= 0 and idx.max() < n_returns
+    return idx
+
+
+def bootstrap_path(prices: pd.DataFrame, idx: np.ndarray) -> pd.DataFrame:
+    """Rebuild a price path from resampled joint log returns.
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        Real aligned prices (n rows).
+    idx : np.ndarray
+        Output of :func:`bootstrap_indices` with ``n − 1`` entries.
+
+    Returns
+    -------
+    pd.DataFrame
+        Simulated prices with the same index and columns as ``prices``; the first row equals
+        the real first prices, and day t's log returns are the real log returns of the
+        historical day ``idx[t − 1]`` for *both* columns.
+    """
+    logp = log_prices(prices).to_numpy()
+    rets = np.diff(logp, axis=0)
+    assert len(idx) == len(rets)
+    sim = np.vstack([logp[:1], logp[:1] + np.cumsum(rets[idx], axis=0)])
+    return pd.DataFrame(np.exp(sim), index=prices.index, columns=prices.columns)
+
+
+def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str, float]:
+    """Repeat the Phase 2 procedure on one simulated path.
+
+    Parameters
+    ----------
+    path : pd.DataFrame
+        Simulated prices (columns ``TICKER_A``, ``TICKER_B``).
+    params : BootstrapParams
+        Simulation parameters.
+
+    Returns
+    -------
+    dict[str, float]
+        ``beta``, ``eg_pvalue`` (simulated IS), and for ``is``/``oos``: ``sharpe_net``,
+        ``sharpe_gross``, ``ann_return_net``, ``n_trades``.
+
+    Notes
+    -----
+    beta and the Engle-Granger test use the simulated IS only (rows < ``split_index``); the
+    simulated OOS uses the frozen beta, starts flat, and takes its z-score warm-up from the
+    last IS rows — exactly as Phase 2 / OOS access #1 on real data.
+    """
+    idx = path.index
+    split_date = idx[params.split_index].date()
+    end_all = (idx[-1] + pd.Timedelta(days=1)).date()
+
+    fit = fit_hedge_ratio(path, end=split_date)
+    tests = stationarity_tests(path, beta=fit.beta, end=split_date)
+    is_run = run_strategy(
+        path,
+        fit.beta,
+        entry=params.entry,
+        lookback=params.lookback,
+        end=split_date,
+        trade_from=idx[params.is_warmup - 1].date(),
+        lag=params.lag,
+        cost_bps=params.cost_bps,
+    )
+    oos_run = run_strategy(
+        path,
+        fit.beta,
+        entry=params.entry,
+        lookback=params.lookback,
+        end=end_all,
+        trade_from=split_date,
+        lag=params.lag,
+        cost_bps=params.cost_bps,
+    )
+    out: dict[str, float] = {"beta": fit.beta, "eg_pvalue": tests.eg_pvalue}
+    for name, run in (("is", is_run), ("oos", oos_run)):
+        s = performance_summary(run.daily, run.trades)
+        out[f"{name}_sharpe_net"] = s["sharpe_net"]
+        out[f"{name}_sharpe_gross"] = s["sharpe_gross"]
+        out[f"{name}_ann_return_net"] = s["ann_return_net"]
+        out[f"{name}_n_trades"] = s["n_trades"]
+    return out
+
+
+def simulate(prices: pd.DataFrame, params: BootstrapParams) -> pd.DataFrame:
+    """Run all bootstrap paths.
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        Real aligned prices over the full history.
+    params : BootstrapParams
+        Simulation parameters.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per path (index ``path``), columns of :func:`run_simulated_path`.
+    """
+    prices = prices[[TICKER_A, TICKER_B]]
+    assert params.split_index < len(prices)
+    rng = np.random.default_rng(params.seed)
+    rows = []
+    for k in range(params.n_paths):
+        idx = bootstrap_indices(len(prices) - 1, params.block, rng)
+        rows.append(run_simulated_path(bootstrap_path(prices, idx), params))
+        if (k + 1) % 50 == 0:
+            logger.info("Simulated %d / %d paths", k + 1, params.n_paths)
+    table = pd.DataFrame(rows)
+    table.index.name = "path"
+    return table
+
+
+def load_or_simulate(prices: pd.DataFrame, params: BootstrapParams, cache: Path) -> pd.DataFrame:
+    """Load the per-path table from ``cache`` if its parameters and data match, else compute it.
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        Real aligned prices over the full history.
+    params : BootstrapParams
+        Simulation parameters.
+    cache : Path
+        Pickle checkpoint, e.g. ``data/processed/simulation_paths.pkl``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Output of :func:`simulate`.
+
+    Notes
+    -----
+    The checkpoint stores the parameters and a fingerprint of the input data (number of rows,
+    first and last date, first and last prices); any mismatch triggers a recomputation.
+    """
+    fingerprint = {
+        "n_rows": len(prices),
+        "first_date": str(prices.index[0].date()),
+        "last_date": str(prices.index[-1].date()),
+        "first_prices": [float(v) for v in prices.iloc[0]],
+        "last_prices": [float(v) for v in prices.iloc[-1]],
+    }
+    if cache.exists():
+        with cache.open("rb") as f:
+            stored = pickle.load(f)
+        if stored.get("params") == asdict(params) and stored.get("data") == fingerprint:
+            logger.info("Loaded simulation table from %s", cache)
+            table: pd.DataFrame = stored["table"]
+            return table
+        logger.warning("Checkpoint %s does not match the parameters or data: recomputing", cache)
+    table = simulate(prices, params)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    with cache.open("wb") as f:
+        pickle.dump({"params": asdict(params), "data": fingerprint, "table": table}, f)
+    logger.info("Saved simulation table to %s", cache)
+    return table
