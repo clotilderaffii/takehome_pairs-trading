@@ -103,11 +103,20 @@ def log_prices(prices: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(np.log(prices.to_numpy()), index=prices.index, columns=prices.columns)
 
 
+def _regression_space(prices: pd.DataFrame, use_logs: bool) -> pd.DataFrame:
+    """Return log prices (main design) or the price levels themselves (brief's version)."""
+    if use_logs:
+        return log_prices(prices)
+    assert not prices.isna().to_numpy().any(), "NaN in prices"
+    return prices.astype(float)
+
+
 def fit_hedge_ratio(
     prices: pd.DataFrame,
     end: date,
     ticker_a: str = TICKER_A,
     ticker_b: str = TICKER_B,
+    use_logs: bool = True,
 ) -> HedgeFit:
     """Estimate ``log P_A = alpha + beta * log P_B`` by OLS on dates before ``end``.
 
@@ -119,6 +128,9 @@ def fit_hedge_ratio(
         Exclusive cutoff; rows with date >= ``end`` are dropped before anything else.
     ticker_a, ticker_b : str, optional
         Dependent (A) and explanatory (B) legs.
+    use_logs : bool, optional
+        True (main design): regress log prices. False: regress price levels
+        ``P_A = alpha + beta * P_B``, as in the brief (robustness check only).
 
     Returns
     -------
@@ -132,20 +144,20 @@ def fit_hedge_ratio(
 
     Notes
     -----
-    The regression is on log prices rather than price levels (as in the brief): over the
-    in-sample period prices span about two orders of magnitude, and a unit of log spread is
-    the same percentage mispricing in every decade. OLS standard errors are not reported:
+    The main regression is on log prices rather than price levels (as in the brief): over
+    the in-sample period prices span about two orders of magnitude, and a unit of log spread
+    is the same percentage mispricing in every decade. OLS standard errors are not reported:
     with non-stationary regressors they are not valid.
     """
-    logp = log_prices(_cut(prices, end)[[ticker_a, ticker_b]])
-    model = sm.OLS(logp[ticker_a], sm.add_constant(logp[ticker_b])).fit()
+    x = _regression_space(_cut(prices, end)[[ticker_a, ticker_b]], use_logs)
+    model = sm.OLS(x[ticker_a], sm.add_constant(x[ticker_b])).fit()
     fit = HedgeFit(
         alpha=float(model.params["const"]),
         beta=float(model.params[ticker_b]),
         r_squared=float(model.rsquared),
         n_obs=int(model.nobs),
-        first_date=logp.index.min().date(),
-        last_date=logp.index.max().date(),
+        first_date=x.index.min().date(),
+        last_date=x.index.max().date(),
     )
     if fit.beta <= BETA_WARNING_THRESHOLD:
         logger.warning(
@@ -156,7 +168,8 @@ def fit_hedge_ratio(
             ticker_a,
         )
     logger.info(
-        "Hedge fit %s ~ %s on %s..%s: alpha=%.4f beta=%.4f R2=%.4f",
+        "Hedge fit (%s) %s ~ %s on %s..%s: alpha=%.4f beta=%.4f R2=%.4f",
+        "log prices" if use_logs else "price levels",
         ticker_a,
         ticker_b,
         fit.first_date,
@@ -173,6 +186,7 @@ def compute_spread(
     beta: float,
     ticker_a: str = TICKER_A,
     ticker_b: str = TICKER_B,
+    use_logs: bool = True,
 ) -> pd.Series:
     """Compute the log spread ``log P_A − beta · log P_B``.
 
@@ -184,6 +198,8 @@ def compute_spread(
         Hedge ratio, estimated beforehand (in-sample only).
     ticker_a, ticker_b : str, optional
         Legs A and B.
+    use_logs : bool, optional
+        True (main design): log spread. False: price spread ``P_A − beta · P_B`` in USD.
 
     Returns
     -------
@@ -194,8 +210,8 @@ def compute_spread(
     -----
     alpha is left out on purpose: it is a constant shift and the rolling z-score removes it.
     """
-    logp = log_prices(prices[[ticker_a, ticker_b]])
-    spread = (logp[ticker_a] - beta * logp[ticker_b]).rename("spread")
+    x = _regression_space(prices[[ticker_a, ticker_b]], use_logs)
+    spread = (x[ticker_a] - beta * x[ticker_b]).rename("spread")
     assert not spread.isna().any()
     return spread
 
@@ -227,6 +243,7 @@ def stationarity_tests(
     end: date,
     ticker_a: str = TICKER_A,
     ticker_b: str = TICKER_B,
+    use_logs: bool = True,
 ) -> StationarityResult:
     """Run ADF on the spread, Engle-Granger on the two log prices, and the AR(1) half-life.
 
@@ -240,6 +257,8 @@ def stationarity_tests(
         Exclusive cutoff applied first.
     ticker_a, ticker_b : str, optional
         Legs A and B.
+    use_logs : bool, optional
+        True (main design): tests on log prices. False: on price levels (robustness).
 
     Returns
     -------
@@ -254,12 +273,12 @@ def stationarity_tests(
     uses critical values corrected for that, so it is the test to rely on.
     """
     cut = _cut(prices, end)
-    spread = compute_spread(cut, beta, ticker_a, ticker_b)
+    spread = compute_spread(cut, beta, ticker_a, ticker_b, use_logs=use_logs)
     adf_stat, adf_p, adf_lags, *_ = adfuller(
         spread, regression="c", autolag="AIC", result_object=False
     )
-    logp = log_prices(cut[[ticker_a, ticker_b]])
-    eg_stat, eg_p, _ = coint(logp[ticker_a], logp[ticker_b], trend="c", autolag="aic")
+    x = _regression_space(cut[[ticker_a, ticker_b]], use_logs)
+    eg_stat, eg_p, _ = coint(x[ticker_a], x[ticker_b], trend="c", autolag="aic")
     b, hl = half_life(spread)
     return StationarityResult(
         adf_stat=float(adf_stat),

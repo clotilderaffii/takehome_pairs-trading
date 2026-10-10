@@ -6,7 +6,7 @@ Every configuration tried (including failed ones) goes here: date and time, para
 Every access to the out-of-sample period must be logged explicitly.
 
 Counters
-- Backtest configurations tried on IS: 10 (9 grid + 1 pre-registered robustness run, Phase 2)
+- Backtest configurations tried on IS: 11 (Phase 2: 9 grid + 1 lag-2 robustness run; + 1 price-level robustness run)
 - OOS accesses: 0
 
 ---
@@ -196,3 +196,55 @@ returns −1.34 and −1.41). Worst trades last 97–153 days while the spread k
 a level that moves. Every configuration has negative net Sharpe; the failure is not specific to one
 parameter choice. Costs are not the cause (Sharpe lowered by at most 0.06). Nothing was changed after
 seeing these results; the OOS has not been touched.
+
+---
+
+## 2026-10-10 12:36 CEST — Pre-registration: robustness run on price levels, as in the brief (written BEFORE computing it)
+
+**Type:** robustness check, IS only. Counted as an attempt: IS backtest counter 10 → **11**.
+
+**Motivation.** Phase 2 deviated from the brief by regressing log prices instead of price levels. This run
+checks that the negative Phase 2 result does not depend on that choice. It is not a new candidate strategy:
+whatever the outcome, the main configuration of the project stays the log-price one fixed at 11:56.
+
+**Design.**
+- OLS on IS (dates < 2013-01-01): `P_INTC = α + β · P_AMD + ε`. Spread = `P_INTC − β · P_AMD` (adjusted prices, USD).
+- ADF test on the price spread and Engle–Granger test on the two price series, with p-values.
+- Main configuration only: e = 2.0, L = 60, `shift(1)`, same signal rules (exit at zero crossing, direct flip,
+  no stop-loss), same costs (5 bp per leg per position change), same metrics, same evaluation window as
+  Phase 2 (1980-09-04 … 2012-12-31).
+- P&L: hold 1 share of INTC and β shares of AMD (short when long the spread). Daily return
+  `position_t × (ΔP_INTC,t − β · ΔP_AMD,t) / (P_INTC,t−1 + |β| · P_AMD,t−1)`, i.e. return on the gross
+  capital at the previous close. Costs: 5 bp of each leg's traded notional = 5 bp of gross capital per unit
+  of |Δposition|, as in Phase 2.
+
+---
+
+## 2026-10-10 12:41 CEST — Result: robustness run on price levels (IS backtest #11)
+
+**Period:** IS; regression 1980-03-17 … 2012-12-31, evaluation window 1980-09-04 … 2012-12-31 (same as Phase 2).
+No OOS data loaded. Code: `use_logs=False` option in `pairs.spread` / `pairs.backtest` (look-ahead test
+extended to it). Notebook: section "Robustness: price levels as in the brief" in `notebooks/02_signal.ipynb`.
+Figure: `reports/figures/02e_spread_levels_is.{png,html}`.
+
+**Regression (price levels):** α = 2.1677 USD, β = 0.5255 (> 0, AMD acts as a hedge), R² = 0.2213.
+**Stationarity:** ADF on the price spread stat −1.619, p = 0.473 (36 lags); Engle–Granger stat −1.621,
+p = 0.712. Descriptive: AR(1) b = −0.00092, half-life ≈ 751 trading days. → **not stationary.**
+
+| e = 2.0, L = 60, lag 1 | log prices (main, #5) | price levels (#11) |
+|---|---|---|
+| ann. return gross / net (%) | −7.84 / −8.16 | −8.37 / −8.69 |
+| ann. vol net (%) | 22.22 | 28.21 |
+| Sharpe gross / net | −0.26 / −0.27 | −0.17 / −0.18 |
+| max DD net (%) | −96.21 | −97.45 |
+| trades | 115 | 116 |
+| win rate net (%) | 53.91 | 56.03 |
+| avg / max duration (days) | 45.4 / 188 | 44.0 / 189 |
+| exposure (%) | 63.96 | 62.63 |
+
+**Diagnostic (descriptive):** with a fixed number of shares the AMD leg is a median 92.3% of gross capital in
+the 1980s, 69.0% in the 1990s, 31.2% in the 2000s and 20.4% in 2010–2012: the price-level book is not
+balanced over time, which explains the higher volatility.
+
+**Reading:** the negative Phase 2 result does not depend on the log-price choice. Nothing changed after
+seeing this result; the main configuration of the project remains the log-price one.

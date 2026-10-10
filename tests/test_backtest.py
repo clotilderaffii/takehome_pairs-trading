@@ -34,6 +34,20 @@ def test_position_is_signal_shifted_and_pnl_uses_it() -> None:
     assert d["gross_ret"].iloc[1] == pytest.approx(0.10 / 1.5)
 
 
+def test_price_level_pnl_uses_previous_gross_capital() -> None:
+    prices = _prices()
+    beta = 0.5
+    signal = pd.Series([1, 1, 0, 0, -1, 0], index=prices.index)
+    d = run_backtest(prices, beta, signal, cost_bps=0.0, lag=1, use_logs=False)
+    assert d["position"].tolist() == [0, 1, 1, 0, 0, -1]
+    # Day 1: long 1 INTC / short 0.5 AMD; ΔINTC = +10, ΔAMD = 0; capital at t-1 = 100 + 0.5*10.
+    assert d["gross_ret"].iloc[1] == pytest.approx(10.0 / 105.0)
+    # Day 2: ΔINTC = -11, ΔAMD = +1; capital at t-1 = 110 + 0.5*10.
+    assert d["gross_ret"].iloc[2] == pytest.approx((-11.0 - 0.5 * 1.0) / 115.0)
+    # Day 5: short; ΔINTC = 0, ΔAMD = +1.1; capital at t-1 = 108.9 + 0.5*11.
+    assert d["gross_ret"].iloc[5] == pytest.approx(-(0.0 - 0.5 * 1.1) / (108.9 + 5.5))
+
+
 def test_lag_two_delays_one_more_day() -> None:
     prices = _prices()
     signal = pd.Series([1, 1, 0, 0, -1, 0], index=prices.index)

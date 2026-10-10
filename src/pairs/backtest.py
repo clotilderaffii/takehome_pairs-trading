@@ -46,6 +46,7 @@ def run_backtest(
     trade_from: date | None = None,
     ticker_a: str = TICKER_A,
     ticker_b: str = TICKER_B,
+    use_logs: bool = True,
 ) -> pd.DataFrame:
     """Backtest a spread position series on gross capital.
 
@@ -54,7 +55,8 @@ def run_backtest(
     prices : pd.DataFrame
         Aligned adjusted prices.
     beta : float
-        Hedge ratio (log-price regression), estimated beforehand.
+        Hedge ratio, estimated beforehand (log-price regression if ``use_logs``,
+        price-level regression otherwise).
     signal : pd.Series
         Desired position at each close, values in {-1, 0, 1}, same index as ``prices``.
     cost_bps : float, optional
@@ -67,6 +69,9 @@ def run_backtest(
         before it are dropped, so every configuration starts flat on the same day.
     ticker_a, ticker_b : str, optional
         Legs A and B.
+    use_logs : bool, optional
+        True (main design): constant capital weights, see Notes. False (price-level
+        robustness run): constant share counts, see Notes.
 
     Returns
     -------
@@ -76,12 +81,18 @@ def run_backtest(
 
     Notes
     -----
-    ``spread_ret_t = (r_A,t − beta · r_B,t) / (1 + |beta|)``: weights ``1/(1+|beta|)`` on A
-    and ``−beta/(1+|beta|)`` on B, gross exposure 1. Because the two legs sum to 1 unit of
-    capital, a cost of ``cost_bps`` on each leg's notional is ``cost_bps`` of capital per
-    unit of ``|Δposition|``: one entry or exit costs 5 bp, a round trip or a flip 10 bp.
-    The cost is charged on the day the new position becomes active. Daily rebalancing to
-    constant weights is implied and its cost ignored (declared limitation).
+    Log design: ``spread_ret_t = (r_A,t − beta · r_B,t) / (1 + |beta|)``: weights
+    ``1/(1+|beta|)`` on A and ``−beta/(1+|beta|)`` on B, gross exposure 1. Daily rebalancing
+    to constant weights is implied and its cost ignored (declared limitation).
+
+    Price-level design: hold 1 share of A and beta shares of B,
+    ``spread_ret_t = (ΔP_A,t − beta · ΔP_B,t) / (P_A,t−1 + |beta| · P_B,t−1)``, the return
+    on the gross capital at the previous close.
+
+    In both cases the two legs sum to 1 unit of gross capital, so a cost of ``cost_bps`` on
+    each leg's notional is ``cost_bps`` of capital per unit of ``|Δposition|``: one entry or
+    exit costs 5 bp, a round trip or a flip 10 bp. The cost is charged on the day the new
+    position becomes active.
     """
     assert signal.index.equals(prices.index), "signal and prices must share the index"
     assert set(signal.unique()) <= {-1, 0, 1}, "signal must be in {-1, 0, 1}"
@@ -91,8 +102,14 @@ def run_backtest(
     if trade_from is not None:
         sig[sig.index < pd.Timestamp(trade_from)] = 0
 
-    rets = prices[[ticker_a, ticker_b]].pct_change()
-    spread_ret = ((rets[ticker_a] - beta * rets[ticker_b]) / (1 + abs(beta))).fillna(0.0)
+    if use_logs:
+        rets = prices[[ticker_a, ticker_b]].pct_change()
+        spread_ret = ((rets[ticker_a] - beta * rets[ticker_b]) / (1 + abs(beta))).fillna(0.0)
+    else:
+        dp = prices[[ticker_a, ticker_b]].diff()
+        prev = prices[[ticker_a, ticker_b]].shift(1)
+        gross_capital = prev[ticker_a] + abs(beta) * prev[ticker_b]
+        spread_ret = ((dp[ticker_a] - beta * dp[ticker_b]) / gross_capital).fillna(0.0)
     position = sig.shift(lag).fillna(0).astype(int)
     turnover = position.diff().abs().fillna(0.0)
     turnover.iloc[0] = abs(int(position.iloc[0]))
@@ -193,6 +210,7 @@ def run_strategy(
     trade_from: date | None = None,
     lag: int = 1,
     cost_bps: float = DEFAULT_COST_BPS,
+    use_logs: bool = True,
 ) -> StrategyRun:
     """Run spread -> z-score -> positions -> backtest -> trades for one configuration.
 
@@ -214,6 +232,9 @@ def run_strategy(
         Execution delay in days (1 = main design, 2 = robustness check).
     cost_bps : float, optional
         Cost per leg in bp.
+    use_logs : bool, optional
+        True (main design): log spread and constant capital weights. False: price spread
+        and constant share counts (price-level robustness run).
 
     Returns
     -------
@@ -222,14 +243,17 @@ def run_strategy(
     """
     cut = prices[prices.index < pd.Timestamp(end)]
     assert cut.index.max() < pd.Timestamp(end)
-    spread = compute_spread(cut, beta)
+    spread = compute_spread(cut, beta, use_logs=use_logs)
     z = rolling_zscore(spread, lookback)
     signal = positions_from_zscore(z, entry)
-    daily = run_backtest(cut, beta, signal, cost_bps=cost_bps, lag=lag, trade_from=trade_from)
+    daily = run_backtest(
+        cut, beta, signal, cost_bps=cost_bps, lag=lag, trade_from=trade_from, use_logs=use_logs
+    )
     daily = daily.join(spread).join(z)
     trades = extract_trades(daily, cost_bps=cost_bps)
     logger.info(
-        "e=%.1f L=%d lag=%d: %d trades, %s..%s",
+        "%s e=%.1f L=%d lag=%d: %d trades, %s..%s",
+        "log" if use_logs else "levels",
         entry,
         lookback,
         lag,

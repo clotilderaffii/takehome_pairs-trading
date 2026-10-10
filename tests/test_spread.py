@@ -44,6 +44,29 @@ def test_compute_spread_formula() -> None:
     assert s.name == "spread"
 
 
+def test_compute_spread_price_levels() -> None:
+    idx = pd.to_datetime(["2012-01-03", "2012-01-04"])
+    prices = pd.DataFrame({"INTC": [20.0, 22.0], "AMD": [4.0, 6.0]}, index=idx)
+    s = compute_spread(prices, beta=2.0, use_logs=False)
+    np.testing.assert_allclose(s.to_numpy(), [12.0, 10.0])
+
+
+def test_fit_price_levels_recovers_known_alpha_beta() -> None:
+    rng = np.random.default_rng(4)
+    n = 3000
+    p_b = 20 + np.cumsum(rng.normal(0, 0.2, n))
+    noise = np.zeros(n)
+    for t in range(1, n):
+        noise[t] = 0.9 * noise[t - 1] + rng.normal(0, 0.1)
+    idx = pd.bdate_range("2000-01-03", periods=n)
+    prices = pd.DataFrame({"INTC": 5.0 + 2.0 * p_b + noise, "AMD": p_b}, index=idx)
+    fit = fit_hedge_ratio(prices, end=date(2100, 1, 1), use_logs=False)
+    assert fit.beta == pytest.approx(2.0, abs=0.02)
+    assert fit.alpha == pytest.approx(5.0, abs=0.5)
+    res = stationarity_tests(prices, beta=fit.beta, end=date(2100, 1, 1), use_logs=False)
+    assert res.eg_pvalue < 0.01
+
+
 def test_half_life_of_known_ar1() -> None:
     rng = np.random.default_rng(1)
     phi, n = 0.95, 20000
