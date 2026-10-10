@@ -248,3 +248,82 @@ balanced over time, which explains the higher volatility.
 
 **Reading:** the negative Phase 2 result does not depend on the log-price choice. Nothing changed after
 seeing this result; the main configuration of the project remains the log-price one.
+
+---
+
+## 2026-10-10 13:20 CEST — Phase 3 pre-registration: rolling β + rolling ADF (written BEFORE computing)
+
+**Type:** stability analysis, IS only (dates < 2013-01-01). **Not a new backtest:** the IS backtest counter
+stays at 11. No Phase 2 parameter is modified.
+
+**Method** (the brief's "medium" option), on log adjusted prices, rolling window **W = 252** trading days:
+- **Rolling β:** for every day t, OLS slope (with intercept) of `log P_INTC` on `log P_AMD` over the 252 days
+  ending at t inclusive (computed as rolling cov/var, identical to the OLS slope). Undefined for the first 251 days.
+- **Rolling ADF:** every **21** trading days (≈ monthly, to limit computation), starting at the first day with a
+  full window (IS index 251, then 272, 293, …): build the window's spread with the window's own β and run the
+  ADF test (constant, lag length by AIC).
+- **Weak period:** ADF p-value > **0.05**, i.e. the window's spread does not look stationary.
+- **No look-ahead:** the ADF computed at the close of day t_k applies from day t_k + 1 up to and including the
+  next recomputation day; hence the flag used on day t only uses data up to t − 1. Days before the first ADF
+  result have no flag.
+
+**Check required by the brief:** does the Phase 2 signal perform worse in weak periods? Using the daily **net**
+returns of the main configuration (e = 2.0, L = 60, static β = 1.0471, lag 1) on the Phase 2 evaluation window,
+recomputed with the same function and parameters (identical by construction, asserted; not a new backtest).
+For weak vs strong days: number of days and share, exposure (share of days in a position), annualized return,
+Sharpe, max drawdown; number of trades and net win rate with trades classified by the flag of their entry day.
+**Welch t-test** on the difference of mean daily net returns, using **all days** of the window including flat
+days (returns as actually experienced, consistent with the Sharpe), with each regime's exposure reported
+alongside: a regime with more flat days has a mean pulled towards zero for that reason alone.
+
+**Operational details.**
+1. Days without a flag (from 1980-09-04 until the first ADF result, around March 1981) and trades entered on
+   such days are excluded from the comparison; their number is reported.
+2. Metrics on non-contiguous days: annualized return, Sharpe and max drawdown of a regime are computed on the
+   sequence of that regime's days only; max drawdown is therefore that of a "stitched" equity curve made of the
+   weak (or strong) days only.
+
+**Declared limitations.**
+1. The ADF p-value on a spread whose β is estimated in the same window is optimistic, so the classification
+   tends to *under*-count weak periods.
+2. With 252 observations the ADF has low power: even a stationary but slow spread often gives p > 0.05, which
+   pushes in the opposite direction (weak periods *over*-counted).
+3. Consecutive windows overlap by about 92% (231 of 252 days), so flags are highly persistent; the Welch p-value
+   is approximate, because daily returns are autocorrelated and regimes come in long blocks (less independent
+   information than the day count suggests).
+4. The flag measures whether a relationship (with a *local* β) exists in the period, **not** whether the
+   static-β spread that the strategy actually trades is stationary.
+
+---
+
+## 2026-10-10 13:25 CEST — Phase 3 results, IS only (design exactly as pre-registered at 13:20)
+
+**Type:** stability analysis; no new backtest (IS backtest counter stays at 11). The main configuration's daily
+returns were recomputed with the same function and parameters; identity with Phase 2 asserted
+(Sharpe net −0.27, 115 trades). No OOS data loaded.
+**Code:** `src/pairs/stability.py` (+ `shade_periods` in `plotting.py`); tests in `tests/test_stability.py`
+incl. a look-ahead test on the flag. **Notebook:** `notebooks/03_stability.ipynb`.
+**Figures:** `reports/figures/03a_rolling_beta_is`, `03b_rolling_adf_pvalue_is`, `03c_equity_weak_shaded_is` (.png/.html).
+
+**Rolling β (252 days, log prices):** median 0.386; 5th–95th percentile −0.177 … 0.953; min −0.614, max 1.865;
+std 0.371; β ≤ 0 on 12.2% of days, β ≤ 0.1 on 20.5%. Static IS β = 1.047 lies above the 95th percentile.
+
+**Rolling ADF (every 21 days):** 382 windows, first computed 1981-03-16, last 2012-11-30; 332 windows with
+p > 0.05. Weak days: **86.9%** of flagged IS days (6,971 of 8,021; 1981-03-17 … 2012-12-31). Strong share by
+decade: 34.0% (1980s), 5.0% (1990s), 2.5% (2000s), 13.9% (2010–2012).
+
+**Main configuration (e = 2.0, L = 60, static β, lag 1, net), weak vs strong days:**
+
+| regime | days | share | exposure | mean daily net | ann. return | Sharpe | max DD (stitched) | trades | win rate net |
+|---|---|---|---|---|---|---|---|---|---|
+| weak | 6971 | 86.91% | 64.73% | −2.40 bp | −8.21% | −0.27 | −94.22% | 90 | 50.00% |
+| strong | 1050 | 13.09% | 55.71% | −1.72 bp | −6.23% | −0.21 | −38.74% | 23 | 69.57% |
+
+Welch t-test on mean daily net return (weak − strong): t = −0.16, p = 0.875 (approximate). Excluded (no flag
+yet): 133 days, 2 trades.
+
+**Reading:** the relationship is unstable (β varies widely, often ≤ 0) and fails the rolling stationarity test
+on most of the IS, especially after 1990. The signal loses in both regimes; weak days are slightly worse but
+not distinguishably so. Max drawdowns are not comparable across regimes (different lengths of stitched curves).
+Untested hypothesis noted for later: with a local β around 0.4 and a static hedge of 1.05, the static-β spread
+behaves largely like a position in AMD.

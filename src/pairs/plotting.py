@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import pandas as pd
 import plotly.graph_objects as go
 
 from pairs.config import FIGURES_DIR, TICKER_A, TICKER_B
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 SERIES_COLORS: dict[str, str] = {TICKER_A: "#2a78d6", TICKER_B: "#eb6834"}
 #: Colour for derived single series (ratio, difference, spread) that belong to neither leg.
 DERIVED_COLOR: str = "#3d3d3a"
+#: Fill for "weak relationship" periods (red pole of the diverging pair).
+WEAK_SHADE_COLOR: str = "#e34948"
 
 _SURFACE = "#fcfcfb"
 _TEXT_PRIMARY = "#0b0b0b"
@@ -48,6 +51,68 @@ def apply_style(fig: go.Figure, title: str) -> go.Figure:
     )
     fig.update_xaxes(showgrid=False, linecolor=_TEXT_SECONDARY, tickcolor=_TEXT_SECONDARY)
     fig.update_yaxes(gridcolor=_GRID, zeroline=False, linecolor=_TEXT_SECONDARY)
+    return fig
+
+
+def shade_periods(
+    fig: go.Figure,
+    mask: pd.Series,
+    label: str,
+    color: str = WEAK_SHADE_COLOR,
+    opacity: float = 0.18,
+) -> go.Figure:
+    """Shade the contiguous runs of days where ``mask`` is True, with one legend entry.
+
+    Parameters
+    ----------
+    fig : go.Figure
+        Figure with a date x-axis, modified in place.
+    mask : pd.Series
+        Boolean (or nullable boolean) series indexed by date; ``<NA>`` counts as False.
+    label : str
+        Legend text for the shaded area.
+    color : str, optional
+        Fill colour.
+    opacity : float, optional
+        Fill opacity.
+
+    Returns
+    -------
+    go.Figure
+        The same figure, for chaining.
+
+    Notes
+    -----
+    Each run is shaded from its first day to the first day after it (or its last day at
+    the end of the series), so consecutive daily runs touch without gaps.
+    """
+    flags = mask.fillna(False).astype(bool).to_numpy()
+    dates = mask.index
+    i, n = 0, len(flags)
+    while i < n:
+        if not flags[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and flags[j + 1]:
+            j += 1
+        x1 = dates[j + 1] if j + 1 < n else dates[j]
+        fig.add_vrect(
+            x0=dates[i], x1=x1, fillcolor=color, opacity=opacity, line_width=0, layer="below"
+        )
+        i = j + 1
+    # Invisible trace so the shading has a legend entry. It carries a real date (with no y)
+    # and the axis type is forced, otherwise Plotly may infer a numeric x-axis from it.
+    fig.add_trace(
+        go.Scatter(
+            x=[dates[0]],
+            y=[None],
+            mode="markers",
+            name=label,
+            marker={"symbol": "square", "size": 12, "color": color, "opacity": 0.4},
+        )
+    )
+    fig.update_xaxes(type="date")
     return fig
 
 
