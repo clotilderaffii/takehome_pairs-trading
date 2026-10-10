@@ -503,3 +503,79 @@ L = 120 z-score, as in Phase 2), second half OOS with β frozen, starting flat.
 cointegration and trades it profitably in- and out-of-sample; when none exists, it finds nothing and earns nothing
 reliable. INTC/AMD (EG p = 0.975, half-life ≈ 6,700 days, net Sharpe −0.27 IS / −0.18 OOS) resembles the negative
 control: the negative result reflects the data, not a bug hiding a real signal. Caveat: one seed per control.
+
+---
+
+## 2026-10-10 14:47 CEST — Phase 4 pre-registration: short interest (written BEFORE computing)
+
+**Type:** descriptive analysis, no backtest (IS backtest counter stays at 11, OOS access counter stays at 1). The data
+(2025-10-15 … 2026-09-30) lie in the OOS period; using them now is legitimate because the single OOS run of the
+static strategy has been done and no parameter will change.
+
+**Data:** the two raw JSON files already in `data/raw/` (`{INTC,AMD}_short_interest_nasdaq_20261010T082049Z.json`,
+24 semi-monthly settlement dates each); not re-downloaded. Prices: `data/raw/` Yahoo checkpoints, adjusted close.
+
+**Publication date.** Short interest becomes public about 7 business days after the settlement date. **Main
+analysis:** align each value to its publication date = settlement + 7 business days (weekday calendar, exchange
+holidays ignored); if that is not a trading day, use the first trading day on or after it. The settlement-date
+alignment is computed with the same code and reported **as descriptive only** (no inference drawn from it).
+
+**Data-quality flag:** days-to-cover values exactly equal to 1.0 are flagged as a probable floor of the source.
+
+**Variables, one row per period between two consecutive publication dates (23 periods):** period k runs from the
+close of publication day k to the close of publication day k+1.
+- % change of the short interest of INTC and of AMD (value published at k+1 vs value published at k);
+- change of the log spread `log P_INTC − 1.0471 · log P_AMD` (static IS β);
+- simple return of INTC and of AMD over the period;
+- maximum absolute daily return of the two stocks within the period (max over days and over both stocks).
+
+**Exactly three questions, fixed now** (Spearman rank correlation, two-sided p-value, n = 23):
+1. Does each stock's short-interest change go with the spread change in the same period? → 2 correlations
+   (INTC SI change vs spread change; AMD SI change vs spread change).
+2. Does the difference of the SI changes (INTC minus AMD, in percentage points) go with the spread change?
+   → 1 correlation.
+3. Do periods with a strong SI increase coincide with larger-than-usual moves? → 2 correlations (INTC SI change vs
+   max absolute daily return; AMD SI change vs max absolute daily return).
+
+Total: **5 Spearman tests**; no other combination will be tested. For each: ρ, p-value, n, and the minimum |ρ|
+needed for significance at 5% with n = 23 (from the t approximation used for the p-value). Because of multiple
+comparisons, the Bonferroni threshold 0.05 / 5 = 0.01 is reported as well.
+
+**Declared limitations:** 23 observations → very low statistical power; 5 tests → multiple-comparison risk; a single
+one-year window → not representative; the publication lag is approximate (holidays ignored, exact Nasdaq/FINRA
+publication calendar not used).
+
+---
+
+## 2026-10-10 14:50 CEST — Phase 4 results: short interest (design as pre-registered at 14:47)
+
+**Type:** descriptive; no backtest (IS backtests 11, OOS accesses 1, unchanged). Data not re-downloaded.
+**Code:** `src/pairs/short_interest.py`; tests in `tests/test_short_interest.py` (incl. publication-date calculation).
+**Notebook:** `notebooks/04_short_interest.ipynb`. **Figure:** `reports/figures/04a_short_interest_spread.{png,html}`.
+
+**Data:** 24 settlement dates per stock, 2025-10-15 … 2026-09-30; publication anchors 2025-10-24 … 2026-10-09 (all
+publication dates fell on trading days). Over the window INTC short interest +44.0%, AMD +1.1%.
+**Data-quality flag:** days to cover exactly 1.0 on 6/24 INTC dates and 9/24 AMD dates (probable source floor).
+
+**Pre-registered tests, publication-date alignment (main), Spearman, n = 23, critical |ρ| at 5% = 0.413,
+Bonferroni threshold p < 0.01:**
+
+| question | x | y | ρ | p |
+|---|---|---|---|---|
+| Q1 | SI change INTC | spread change | −0.145 | 0.508 |
+| Q1 | SI change AMD | spread change | 0.099 | 0.654 |
+| Q2 | SI change INTC − AMD | spread change | −0.276 | 0.203 |
+| Q3 | SI change INTC | max abs daily return | 0.068 | 0.757 |
+| Q3 | SI change AMD | max abs daily return | −0.099 | 0.654 |
+
+→ **No test significant**, at 5% or after Bonferroni.
+
+**Settlement-date alignment (descriptive only, no inference):** Q1 INTC ρ = 0.386 (p = 0.069), Q1 AMD ρ = −0.184
+(p = 0.401), **Q2 ρ = 0.577 (p = 0.004)**, Q3 INTC ρ = 0.162 (p = 0.460), Q3 AMD ρ = −0.134 (p = 0.541).
+The Q2 value is a contemporaneous co-movement (INTC short interest rising relative to AMD's in periods when INTC
+outperforms), not observable in real time; at publication dates it disappears (ρ = −0.276). It was not a
+pre-registered inferential test, it is one of 10 correlations computed, and it comes from 23 points in one year:
+recorded as a hypothesis for other data, not as a finding.
+
+**Reading:** with short interest aligned to when it becomes public, nothing lines up with the spread or with large
+moves in this window; the power to detect anything below |ρ| ≈ 0.41 is very low.
