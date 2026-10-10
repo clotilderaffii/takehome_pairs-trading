@@ -437,3 +437,32 @@ started flat.
 peak for about a decade (AMD's outperformance; the spread is mostly a short AMD position, Phase 3), and the
 strategy loses most of its value in 2016–2021. No parameter was changed after this run; no other OOS run of the
 static strategy will be made. Pending (as logged at Phase 1): regenerate Phase 1 on the full history.
+
+---
+
+## 2026-10-10 14:17 CEST — Phase 1 on the full history (1980–2026), after OOS access #1
+
+**Type:** descriptive only, as planned at Phase 1; not used to choose or change anything. Not a backtest and not a
+new OOS access of any strategy (OOS access counter stays at 1; IS backtest counter stays at 11).
+**Notebook:** new section "Full history (1980–2026), generated after the single OOS run" at the end of
+`notebooks/01_data.ipynb`; the IS cells, tables and figures are unchanged (IS PNG files byte-identical after
+re-execution). **Figures:** `reports/figures/01c_prices_log_full`, `01d_ratio_difference_full` (.png/.html), with the
+2013-01-01 split marked by a vertical dashed line.
+**Data:** 11,737 common days, 1980-03-17 … 2026-10-09.
+
+**INTC/AMD ratio:** 0.058 at the start, minimum 0.018 (1984-10-10), maximum 13.752 (2015-09-30), 0.172 at the end.
+
+**Correlation of simple daily returns (full history):**
+
+| period | days | correlation |
+|---|---|---|
+| All | 11736 | 0.459 |
+| 1980s | 2475 | 0.557 |
+| 1990s | 2528 | 0.330 |
+| 2000s | 2515 | 0.545 |
+| 2010s (2010–2019) | 2516 | 0.374 |
+| 2020s (2020 – 2026-10-09) | 1702 | 0.498 |
+
+**Reading:** daily co-movement stays positive and moderate in every decade, while the price levels drift apart
+(ratio from its 2015 peak down by almost two orders of magnitude): the same correlation-vs-stable-spread
+distinction found in-sample.
