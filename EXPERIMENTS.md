@@ -7,7 +7,7 @@ Every access to the out-of-sample period must be logged explicitly.
 
 Counters
 - Backtest configurations tried on IS: 11 (Phase 2: 9 grid + 1 lag-2 robustness run; + 1 price-level robustness run)
-- OOS accesses: 0
+- OOS accesses: 1 (#1: static strategy, 2026-10-10 14:06 CEST)
 
 ---
 
@@ -351,3 +351,89 @@ leg's simple daily return:
 −0.75 overall, more negative after the 1980s), and only weakly linked to INTC. A long-spread trade is largely a
 bet against AMD; the Phase 2 signal behaves like a contrarian bet on one volatile stock rather than on the
 relationship.
+
+---
+
+## 2026-10-10 14:05 CEST — Pre-registration: Kalman extension (to be implemented after Phases 4–5)
+
+**Type:** design only. No code written, nothing computed. Written **before** OOS access #1 (static strategy,
+next entry), so the OOS result of the static strategy cannot influence this design.
+
+**Motivation (Phase 3).** The local one-year β has median 0.39 against the static IS β of 1.047; the static-β
+spread is mostly a short AMD position (correlation −0.75 with AMD's daily return). A time-varying hedge ratio
+is the natural attempt to hedge with the local relationship instead.
+
+**Model.** `log P_INTC,t = α_t + β_t · log P_AMD,t + ε_t`, `ε_t ~ N(0, V)`; state `x_t = (α_t, β_t)` follows a
+random walk `x_t = x_{t−1} + w_t`, `w_t ~ N(0, W)`. Two-state Kalman filter implemented by hand in numpy.
+
+**Hyperparameters** from the literature (E. Chan, *Algorithmic Trading*, 2013), **not optimized**:
+V = 0.001; W = δ/(1 − δ) · I with **δ = 1e-4 (main configuration)**. Sensitivity: δ ∈ {1e-5, 1e-4, 1e-3},
+i.e. **3 IS attempts** (IS backtest counter 11 → 14 when run). Declared limitation: these values come from a
+price-level ETF example and are applied to log prices without rescaling; they are not calibrated to this pair.
+
+**Initialization.** State mean = OLS (α, β) on the first 252 days of the IS; initial state covariance = the OLS
+coefficient covariance matrix from the same 252 days. These 252 days are excluded from the evaluation. The
+filter then runs forward day by day from day 253; in the OOS run it continues from its IS state without
+re-initialization.
+
+**No look-ahead.** Only the **filtered** state (data up to and including t) is used, never the smoothed one.
+A pytest test will check that modifying prices after a date d does not change β_t, the z-score or positions
+up to d.
+
+**Signal** identical to Phase 2: L = 60, entry ±2.0, exit when z crosses 0, direct flip allowed, no stop-loss,
+`shift(1)` execution, 5 bp per leg per position change, rf = 0. The z-score of day t applies β_t to the whole
+window, with `a = log P_INTC`, `b = log P_AMD`:
+`s_t = a_t − β_t·b_t`, mean = `mean_L(a) − β_t·mean_L(b)`,
+variance = `var_L(a) + β_t²·var_L(b) − 2·β_t·cov_L(a, b)`, `z_t = (s_t − mean) / sqrt(variance)`.
+
+**P&L** of day t+1: `position_t × (r_INTC,t+1 − β_t · r_AMD,t+1) / (1 + |β_t|)`. Declared limitation: the
+rebalancing costs caused by changes in β are not counted (only position changes pay 5 bp per leg).
+
+**Evaluation.** IS: from the first day after the 252-day initialization to 2012-12-31; the static strategy is
+reported on the same window for comparison (from its existing daily returns, not a new backtest). Same metrics
+as Phase 2.
+
+**OOS.** The main configuration δ = 1e-4 will have its own single OOS run after implementation (planned OOS
+access #2), **whatever its IS result**. The design will not be modified after seeing the OOS of the static
+strategy.
+
+---
+
+## 2026-10-10 14:06 CEST — OOS access #1: single out-of-sample run of the static strategy (written BEFORE computing)
+
+**Frozen configuration** (pre-registered 11:56, unchanged): log prices; β = 1.0471 estimated on the IS
+(dates < 2013-01-01) and **not re-estimated**; e = 2.0, L = 60; `shift(1)`; 5 bp per leg per position change;
+rf = 0; exit at zero crossing, direct flip, no stop-loss.
+**Period:** 2013-01-01 to the last available date in `data/raw/` (2026-10-09). The z-score may use the last 59
+IS days as warm-up; the strategy starts **flat** on the first OOS trading day.
+**Commitment:** no parameter will be modified after this run, and no other run of the static strategy on the OOS
+will be made. Descriptive only: ADF and Engle–Granger tests on the OOS spread.
+**OOS access counter: 1.**
+
+---
+
+## 2026-10-10 14:07 CEST — Result of OOS access #1 (static strategy)
+
+**Notebook:** `notebooks/02c_oos.ipynb`. **Figures:** `reports/figures/02f_equity_oos`, `02g_spread_oos` (.png/.html).
+β = 1.0471 re-checked as estimated on IS only (last date used 2012-12-31). IS reference recomputed with the same
+function and parameters (Sharpe net −0.27, 115 trades; asserted). OOS: 2013-01-02 … 2026-10-09, 3464 days,
+started flat.
+
+| e = 2.0, L = 60, lag 1 | IS (1980-09-04 … 2012-12-31) | OOS (2013-01-02 … 2026-10-09) |
+|---|---|---|
+| ann. return gross / net (%) | −7.84 / −8.16 | −6.22 / −6.56 |
+| ann. vol net (%) | 22.22 | 22.80 |
+| Sharpe gross / net | −0.26 / −0.27 | −0.16 / −0.18 |
+| max DD gross / net (%) | −95.93 / −96.21 | −81.80 / −82.44 |
+| trades | 115 | 51 (1 open at end, closed on 2026-10-09 for the stats) |
+| win rate net (%) | 53.91 | 60.78 |
+| avg / max duration (days) | 45.4 / 188 | 40.8 / 132 |
+| exposure (%) | 63.96 | 60.05 |
+
+**Descriptive stationarity tests on the OOS:** ADF on the spread with the frozen β: stat −0.513, p = 0.890
+(0 lags); Engle–Granger on OOS log prices (β re-estimated on the OOS by the test): stat −1.870, p = 0.595.
+
+**Reading:** the negative IS result is confirmed out-of-sample. The frozen-β spread trends down from its 2015
+peak for about a decade (AMD's outperformance; the spread is mostly a short AMD position, Phase 3), and the
+strategy loses most of its value in 2016–2021. No parameter was changed after this run; no other OOS run of the
+static strategy will be made. Pending (as logged at Phase 1): regenerate Phase 1 on the full history.
