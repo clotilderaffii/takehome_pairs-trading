@@ -54,7 +54,11 @@ and must be done only after the single OOS run with frozen parameters, with no f
 
 ---
 
-## 2026-10-10 — Phase 1 (data), in-sample ONLY
+## 2026-10-10 11:35 CEST (time from git commit 87875c0) — Phase 1 (data), in-sample ONLY
+
+*Time added on 2026-10-10 at 14:31 CEST: the entry was originally logged without a time. 11:35:22 +02:00 is the time
+of git commit 87875c0, which added `notebooks/01_data.ipynb`; it is an upper bound, since the work was done
+before the commit.*
 
 **Type:** descriptive analysis, no backtest, no parameter estimated or chosen.
 **Period:** IS, 1980-03-17 … 2012-12-31 (8273 common days). No data ≥ 2013-01-01 loaded:
@@ -466,3 +470,36 @@ re-execution). **Figures:** `reports/figures/01c_prices_log_full`, `01d_ratio_di
 **Reading:** daily co-movement stays positive and moderate in every decade, while the price levels drift apart
 (ratio from its 2015 peak down by almost two orders of magnitude): the same correlation-vs-stable-spread
 distinction found in-sample.
+
+---
+
+## 2026-10-10 14:31 CEST — Pipeline validation on synthetic data (not a strategy attempt)
+
+**Type:** validation of the code with a known answer. Not a strategy attempt: IS backtest counter stays at 11,
+OOS access counter stays at 1. No real data used.
+**Code:** `src/pairs/synthetic.py` (`make_synthetic_pair`, `run_pipeline_control`); tests in
+`tests/test_pipeline_controls.py`. **Notebook:** `notebooks/00_pipeline_check.ipynb`.
+**Figure:** `reports/figures/00_pipeline_controls_equity.{png,html}`.
+
+**Data:** 8,000 business days, seed 2026 (fixed before running, single run, not changed). `log P_B` random walk with
+2% daily volatility; `log P_A = 0.5 + 0.8 · log P_B + s_t`. Positive control: `s_t` AR(1)/Ornstein–Uhlenbeck with
+half-life 10 days and stationary sd 0.05. Negative control: `s_t` random walk with the same daily innovations.
+**Pipeline:** exactly the INTC/AMD functions — `fit_hedge_ratio`, `stationarity_tests`, `run_strategy` with e = 2.0,
+L = 60, `shift(1)`, 5 bp per leg; first half IS (β estimated there only; IS window from the first day with an
+L = 120 z-score, as in Phase 2), second half OOS with β frozen, starting flat.
+
+| | positive (OU residual) | negative (random-walk residual) |
+|---|---|---|
+| β (true 0.8) | 0.800 | 1.122 (spurious) |
+| Engle–Granger p (IS) | 1.90e-18 | 0.618 |
+| ADF p (IS) | 1.53e-19 | 0.369 |
+| half-life, days (IS) | 10.7 | 423.2 |
+| Sharpe net IS / OOS | 1.89 / 1.92 | −0.28 / 0.24 |
+| ann. return net IS / OOS (%) | 20.7 / 19.0 | −3.6 / 2.1 |
+| max DD net IS / OOS (%) | −8.6 / −9.0 | −56.8 / −30.7 |
+| trades IS / OOS | 84 / 84 | 58 / 68 |
+
+**Reading:** expected results obtained. When a mean-reverting relationship exists, the pipeline recovers β, detects
+cointegration and trades it profitably in- and out-of-sample; when none exists, it finds nothing and earns nothing
+reliable. INTC/AMD (EG p = 0.975, half-life ≈ 6,700 days, net Sharpe −0.27 IS / −0.18 OOS) resembles the negative
+control: the negative result reflects the data, not a bug hiding a real signal. Caveat: one seed per control.
