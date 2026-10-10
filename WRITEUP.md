@@ -1,44 +1,61 @@
-# INTC / AMD pairs trading — writeup
+# Pairs trading on INTC/AMD and KO/PEP — writeup
 
-**Result.** INTC and AMD are correlated (daily-return correlation 0.46) but not cointegrated (Engle–Granger p = 0.975
-in-sample). The pre-registered z-score strategy loses in-sample (net Sharpe −0.27) and out-of-sample (−0.18). The loss
-is explained: the static hedge ratio (1.05) is more than twice the local one (median 0.39), so the spread is mostly a
-short-AMD position. Synthetic pairs with a known answer show the pipeline works, so the negative result comes from the
-data, not from a bug.
+**Result.** I completed all five phases on INTC/AMD, the project's pair. Only afterwards did I run the same frozen
+pipeline on KO/PEP, the brief's textbook pair (the "second pair" extension). Neither pair is cointegrated in-sample and
+both lose out-of-sample. INTC/AMD loses everywhere; KO/PEP earns on the whole in-sample grid and still loses
+out-of-sample. A good in-sample result was not evidence of a lasting relationship.
 
-**Repository.** `README.md` maps each phase to its notebook. `EXPERIMENTS.md` is the timestamped, append-only log of
-every pre-registration and result (INTC/AMD: 14 IS backtests, 2 OOS runs; KO/PEP: 9 IS, 1 OOS). The IS/OOS split was
-fixed by rule before looking at any price (IS 1980–2012, OOS 2013–2026). AI usage: see `AI_DISCLOSURE.md`.
+**Repository.** `notebooks/summary.ipynb` is a short guided tour; `README.md` maps phases to notebooks;
+`EXPERIMENTS.md` is the append-only log of every pre-registration and result. Attempts:
 
-## Phases completed
+- INTC/AMD: 14 IS backtests, 2 OOS runs, 2 simulation runs;
+- KO/PEP: 9 IS backtests, 1 OOS run, 1 simulation run;
+- 2 synthetic control runs.
 
-Phases 1–5, one extension (Kalman hedge ratio), an appendix on KO/PEP. Throughout: 5 bp per leg costs, look-ahead tests
-on every signal, synthetic positive/negative controls.
+Pre-registrations were committed together with their results, so git alone cannot prove the order. AI usage: see
+`AI_DISCLOSURE.md`.
+
+| | INTC / AMD | KO / PEP |
+|---|---|---|
+| In-sample / out-of-sample | 1980–2012 / 2013–2026 | 1972–2009 / 2010–2026 |
+| Phase 2 — Engle–Granger p (IS); half-life | 0.975; ≈ 27 years | 0.45; ≈ 1.5 years |
+| Net Sharpe IS, main config / grid of 9 | −0.27 / all negative | 0.57 / all positive |
+| Net Sharpe OOS, single run | −0.18 | −0.21 |
+| Phase 3 — rolling β median vs static β (IS) | 0.39 vs 1.047 | 0.70 vs 0.98 * |
+| Phase 4 — short interest | association at settlement dates | not run |
+| Phase 5 — real Sharpe percentile in null, IS / OOS | 2.8th / 21st | 94th / 1.8th * |
+| Kalman extension, net Sharpe IS / OOS | +0.25 / +0.07 | not run |
+
+\* Decided after seeing the KO/PEP results: diagnostics, not tests.
 
 ## Methods chosen, and why
 
-- **Phase 2 — log prices**, because prices span two orders of magnitude (a run on price levels gives the same
-  conclusion). Stationarity tested with ADF and Engle–Granger, not only by eye. Main configuration (2.0σ, 60 days)
-  fixed a priori; the 3×3 grid measures sensitivity and was not used to pick a cell (all 9 are negative net).
-- **Phase 3 — rolling β + rolling ADF** rather than rolling correlation, because the diagnosis needed the hedge ratio
-  itself.
-- **Phase 4 — Nasdaq short interest on both legs**, aligned to the publication date to avoid look-ahead; 5
-  pre-registered tests on 23 periods, none significant.
-- **Phase 5 — joint block bootstrap rather than OU**, because Phase 2 rejects mean reversion. The real OOS Sharpe sits
-  at the 21st percentile of "correlated but unrelated" paths. A look-elsewhere test checks the 1997–2004 window, which
-  looked related by eye: it is not cointegrated (p = 0.51), and in 78.5% of "no relationship" histories at least one
-  eight-year window passes Engle–Granger at 5%.
-- **Extension — Kalman hedge ratio.** Chosen because it tests the Phase 3 diagnosis: if the losses come from a static β
-  far from the local one, a time-varying β should remove them (a basket would change the assets, walk-forward the
-  validation scheme). Hyperparameters from the literature, pre-registered before the first OOS run. Net Sharpe +0.25 IS,
-  +0.07 OOS (interval includes zero): most of the loss is removed, no profit is created.
-- **Appendix — KO/PEP**, the brief's textbook pair, run through the frozen pipeline. The IS grid is all positive (main
-  0.57), but the pair is not cointegrated (p = 0.45) and the single OOS run loses (−0.21). A bootstrap (declared after
-  the result) puts the IS Sharpe at the 94th percentile of "no relationship" paths: a robust in-sample grid is not
-  evidence of a lasting relationship.
+- **Phase 2 — log prices**, because prices span two orders of magnitude; a run on price levels gives the same result.
+  I tested stationarity with Engle–Granger, not only by eye. The main configuration was fixed a priori, and the grid
+  only measures sensitivity.
+- **Phase 3 — rolling β + rolling ADF**, because the diagnosis needed the hedge ratio itself. On INTC/AMD the static β
+  is far above the local one, so the spread moves mostly with AMD (correlation −0.75). This is consistent with the
+  losses, but not proof.
+- **Phase 4 — INTC/AMD only.** The publication-date alignment I pre-registered was the wrong choice: it is neither
+  contemporaneous nor usable in real time. At settlement dates, relative short interest moved with the spread
+  (ρ = 0.58, p = 0.004, which survives Bonferroni over 10 tests). This is an association in one year of data, not a
+  signal. I did not run Phase 4 on KO/PEP because the Nasdaq data do not cover KO (NYSE-listed).
+- **Phase 5 — block bootstrap rather than OU**, because Phase 2 finds no mean reversion to simulate. The null is
+  "no link beyond 20 days".
+  - KO/PEP's in-sample profit is about what this null already earns (median 0.32).
+  - The look-elsewhere test is a general lesson: in 78.5% of null histories some eight-year window passes
+    Engle–Granger at 5%.
+- **Kalman extension (INTC/AMD).** I chose it to test the Phase 3 diagnosis. It does not confirm it: with a local β
+  around 0.2 it becomes a bet on INTC instead of AMD, its IS Sharpe comes from 1981–1991, and its OOS Sharpe is
+  indistinguishable from zero. It is also not blind to the declared prior knowledge about AMD.
+- **Code check.** On synthetic pairs the code recovers a known OU relationship and finds nothing on a random walk. This
+  rules out gross errors, but it is not a proof of power against a weak relationship.
+
+**Limitations.** Short-borrow costs are not modelled, and neither are the Kalman's rebalancing costs. The first IS
+trade inherits the signal state from before the evaluation window.
 
 ## With more time
 
-Walk-forward validation instead of a single split; Kalman noise calibrated by maximum likelihood; a z-score based on the
-filter's prediction error; longer Phase 3 windows; an OU simulation of KO/PEP to ask the opposite question to the
-bootstrap; a basket of three or more stocks tested with Johansen.
+- A power curve on synthetic pairs.
+- Walk-forward validation.
+- Comparing the Kalman strategy with mean reversion on INTC alone.

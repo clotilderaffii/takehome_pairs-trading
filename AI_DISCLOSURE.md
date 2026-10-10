@@ -9,18 +9,16 @@ and explained them, I questioned them and decided what to adopt. Claude Code wro
 
 **Ideas and decisions that came from me.**
 
-- **Rules of the project.** Before any analysis I required that a negative result be accepted only after documented
-  attempts and a diagnosis, so that "it doesn't work" could not be an easy way out. I chose INTC/AMD for Phase 4 data
-  coverage, and after the negative OOS result I chose not to switch pair, because choosing the pair after seeing the
-  outcome is the selection bias this exercise is about.
+- **Choice of pair.** I chose INTC/AMD for Phase 4 data coverage, and after the negative OOS result I chose not to
+  switch pair, because choosing the pair after seeing the outcome is the selection bias this exercise is about.
 - **Questions that became analyses.**
   - I asked whether the negative result could be a bug; this led to the synthetic positive/negative controls.
   - I noticed that INTC and AMD prices look related after 1997; testing that window is the look-elsewhere analysis in
     Phase 5.
   - I noticed that the z-score oscillates as if mean-reverting even though the pair is not cointegrated; this led to
     the comparison with a synthetic random walk in notebook 02.
-- **The KO/PEP appendix.** Adding a second pair to test the frozen pipeline was my decision, and I asked whether its
-  in-sample profit was noise, which led to running Phases 3 and 5 on it.
+- **The KO/PEP appendix.** Adding a second pair, after completing the five phases on INTC/AMD, to test the frozen
+  pipeline was my decision. I asked whether its in-sample profit was noise, which led to running Phases 3 and 5 on it.
 - **Corrections to the AI.**
   - I stopped a proposed order that would have run the Kalman extension before Phases 4–5.
   - I rejected a strategy variant outside Phase 2's scope.
