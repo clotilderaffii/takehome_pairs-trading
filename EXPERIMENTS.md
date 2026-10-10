@@ -905,3 +905,96 @@ rose sharply and the strategy was short the spread. The pipeline therefore does 
 whose spread reverts on short horizons (and recovers genuine cointegration on synthetic data), so the INTC/AMD failure
 is not a pipeline artefact; and a robust IS grid on the textbook pair still did not survive its single OOS test. No
 INTC/AMD conclusion changes. Appendix counters at the end: **9 IS backtests, 1 OOS access** (as planned).
+
+## 2026-10-10 17:24 CEST — Appendix pre-registration: Phase 3 and Phase 5 diagnostics for KO/PEP (BEFORE computing)
+
+**Disclosure.** These analyses were decided **after** seeing the KO/PEP IS and OOS results, to explain the
+out-of-sample decay (net Sharpe 0.57 IS vs −0.21 OOS) and to check whether the IS Sharpe can be distinguished from that
+of two correlated stocks without a relationship. They are diagnostics, not strategy attempts: **no new strategy
+backtest and no new OOS access** (appendix counters stay at 9 IS backtests and 1 OOS access). Simulations are counted
+separately: **appendix simulation runs: 1** once executed.
+
+**Phase 3 (identical methods and parameters to INTC/AMD, 13:20 pre-registration):** on log prices of the **full**
+KO/PEP history 1972-06-01 … 2026-10-09 (legitimate: the OOS has been used), rolling OLS β over W = 252 days; rolling
+ADF every 21 days on the window's spread with the window's own β (constant, AIC lags); weak = ADF p > 0.05; the flag
+of day t uses data up to t − 1. Charts with the 2010-01-01 split line. Weak vs strong comparison of the main
+configuration's **net daily returns already computed** (IS run 1972-11-20 … 2009-12-31, OOS run 2010-01-04 … 2026-10-09),
+**separately for IS and OOS**: days, share, exposure, mean daily return, annualized return, Sharpe, max drawdown
+(stitched), trades by entry-day flag and net win rate, Welch t-test on mean daily net return (all days, approximate).
+Days/trades without a flag are excluded and counted. Same declared limitations as for INTC/AMD (optimistic p-value
+with in-window β; low power with 252 days; overlapping windows; the flag says whether a local relationship exists,
+not whether the static-β spread is stationary).
+
+**Phase 5 (identical to the 15:18 pre-registration):** joint moving-block bootstrap of the daily log returns of KO and
+PEP over the full common history (13,702 returns), block 20, the same dates for both stocks, **500 paths, seed 2026**,
+real length, prices rebuilt from the real 1972-06-01 prices; split at the **same position as the real KO/PEP split**
+(row 9,485); on each path: OLS β on the simulated IS, Engle–Granger on the simulated IS, main configuration (e = 2.0,
+L = 60, `shift(1)`, 5 bp/leg; IS from the first L = 120 z-score day; OOS with β frozen, starting flat) on simulated IS
+and OOS. Outputs: distributions and percentiles of the real net Sharpe (IS 0.57, OOS −0.21; exact values recomputed)
+and of the real IS Engle–Granger p (0.447). **If the computation exceeds 20 minutes, the first 200 paths are used**
+(same seed, so they are the first 200 of the 500) and this is declared. Checkpoint:
+`data/processed/simulation_paths_KO_PEP.pkl`. Same interpretation as for INTC/AMD (correlated stocks without a stable
+relationship beyond 20 days; drifts kept; a real Sharpe in the upper tail would mean the IS profit is unlikely to be
+produced by such a world).
+
+**Code changes allowed:** ticker parameters with INTC/AMD defaults; INTC/AMD results re-checked on a temporary copy as
+before; any change stops the work.
+
+## 2026-10-10 17:37 CEST — Appendix: KO/PEP Phase 3 and Phase 5 diagnostics, results (design as pre-registered at 17:24)
+
+**Counters:** appendix IS backtests 9, appendix OOS accesses 1 (unchanged; no new strategy run); **appendix simulation
+runs: 1 (500 paths)**.
+**Code changes:** `run_simulated_path`, `simulate`, `load_or_simulate` gained `ticker_a`/`ticker_b` (defaults INTC/AMD;
+`BootstrapParams` and the checkpoint fingerprint unchanged); `scripts/run_simulation.py` gained `--tickers`, `--split`,
+`--cache`, `--n-paths` (defaults unchanged); new test `test_run_simulated_path_with_other_tickers_matches_default`.
+**INTC/AMD control:** pytest 95 passed; notebooks 00–06 re-executed on a temporary copy: all text outputs identical (kernel
+temporary file names normalized), all embedded images identical, all 22 PNGs byte-identical ("ALL IDENTICAL"); notebook 05
+reloaded the INTC/AMD checkpoint without recomputing.
+**Simulation:** `scripts/run_simulation.py --tickers KO PEP --split 2010-01-01 --cache simulation_paths_KO_PEP.pkl`,
+500 paths in 543 s (< 20 min, so all 500 paths used). Checkpoint `data/processed/simulation_paths_KO_PEP.pkl`.
+**Notebook:** sections 6–7 of `notebooks/appendix_kopep.ipynb`. **Figures:** `reports/figures/appx_g_kopep_rolling_beta`,
+`appx_h_kopep_rolling_adf`, `appx_i_kopep_sharpe_bootstrap_vs_real` (.png/.html). Transparency note: executing the
+notebook re-ran the earlier sections, including the deterministic OOS run of the frozen configuration; the six earlier
+appendix PNGs are byte-identical and all tables of sections 1–5 are identical to the previous execution.
+
+**Phase 3 (full history, 641 rolling ADF windows 1973-06-04 … 2026-09-24):**
+
+| | IS (to 2009-12-31) | OOS (from 2010-01-01) |
+|---|---|---|
+| rolling β median (5th / 95th pct) | 0.703 (0.003 / 1.318) | 0.651 (−0.117 / 1.357) |
+| % days with rolling β ≤ 0.1 | 8.6 | 9.7 |
+| weak share of flagged days | 68.8% (of 9,233) | 80.1% (of 4,218) |
+
+Weak share by decade: 62.1% (1970s), 61.8% (1980s), 67.6% (1990s), 81.6% (2000s), 72.5% (2010s), 91.4% (2020–2026).
+
+Weak vs strong days, main configuration (already computed daily net returns):
+
+| | days | share | exposure | mean daily net | ann. return | Sharpe | max DD (stitched) | trades | win rate net |
+|---|---|---|---|---|---|---|---|---|---|
+| IS weak | 6356 | 68.84% | 55.62% | 2.72 bp | 6.54% | 0.67 | −17.26% | 105 | 80.95% |
+| IS strong | 2877 | 31.16% | 48.56% | 1.05 bp | 2.26% | 0.29 | −23.95% | 58 | 70.69% |
+| OOS weak | 3378 | 80.09% | 63.56% | −0.77 bp | −2.09% | −0.33 | −29.78% | 48 | 58.33% |
+| OOS strong | 840 | 19.91% | 46.90% | 0.69 bp | 1.66% | 0.40 | −4.71% | 14 | 78.57% |
+
+Welch (weak − strong): IS t = 1.25, p = 0.210 (excluded without a flag: 133 days, 3 trades); OOS t = −1.28, p = 0.199
+(none excluded). Approximate p-values.
+
+**Phase 5 (500 paths, seed 2026, block 20, split row 9,485):**
+
+| | simulated IS net Sharpe | simulated OOS net Sharpe | simulated IS Engle–Granger p |
+|---|---|---|---|
+| median | 0.324 | 0.321 | 0.391 |
+| 5th / 95th percentile | 0.074 / 0.578 | −0.083 / 0.665 | 0.047 / 0.922 |
+| share of paths > 0 | 98.2% | 90.0% | — |
+| share of paths with p < 0.05 | — | — | 5.4% |
+| real value | 0.573 | −0.215 | 0.447 |
+| **percentile of real** | **94.4%** | **1.8%** | **55.0%** |
+
+**Reading:** the KO/PEP relationship is weak most of the time and weakens further over time (82% weak days in the 2000s,
+91% in 2020–2026); the weak/strong flag does not separate the strategy's results reliably (opposite signs IS vs OOS,
+neither significant). In a bootstrap world without a stable relationship the strategy already earns on this pair
+(median IS Sharpe 0.32); the real IS Sharpe (0.57) is near the top of that distribution but inside it (94.4th
+percentile), so the IS profit is not evidence of a long-run relationship. The real OOS Sharpe (−0.21) is at the 1.8th
+percentile: worse than almost all no-relationship paths, consistent with a persistent trend in the spread (2025–2026)
+longer than the 20-day blocks. Diagnostics decided after seeing the results; percentiles are descriptive; nothing was
+changed in the strategy.

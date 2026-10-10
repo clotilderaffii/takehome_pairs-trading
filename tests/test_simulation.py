@@ -82,6 +82,15 @@ def test_run_simulated_path_matches_phase2_functions() -> None:
     assert 0 <= out["eg_pvalue"] <= 1
 
 
+def test_run_simulated_path_with_other_tickers_matches_default() -> None:
+    path = make_synthetic_pair(600, seed=5, mean_reverting=True)
+    params = BootstrapParams(split_index=420)
+    default = run_simulated_path(path, params)
+    renamed = path.rename(columns={"INTC": "KO", "AMD": "PEP"})
+    other = run_simulated_path(renamed, params, ticker_a="KO", ticker_b="PEP")
+    assert default == other
+
+
 def test_load_or_simulate_uses_matching_cache_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

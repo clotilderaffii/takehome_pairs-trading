@@ -106,15 +106,22 @@ def bootstrap_path(prices: pd.DataFrame, idx: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(np.exp(sim), index=prices.index, columns=prices.columns)
 
 
-def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str, float]:
+def run_simulated_path(
+    path: pd.DataFrame,
+    params: BootstrapParams,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> dict[str, float]:
     """Repeat the Phase 2 procedure on one simulated path.
 
     Parameters
     ----------
     path : pd.DataFrame
-        Simulated prices (columns ``TICKER_A``, ``TICKER_B``).
+        Simulated prices (columns ``ticker_a``, ``ticker_b``).
     params : BootstrapParams
         Simulation parameters.
+    ticker_a, ticker_b : str, optional
+        Legs A and B (defaults: INTC, AMD).
 
     Returns
     -------
@@ -132,8 +139,10 @@ def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str,
     split_date = idx[params.split_index].date()
     end_all = (idx[-1] + pd.Timedelta(days=1)).date()
 
-    fit = fit_hedge_ratio(path, end=split_date)
-    tests = stationarity_tests(path, beta=fit.beta, end=split_date)
+    fit = fit_hedge_ratio(path, end=split_date, ticker_a=ticker_a, ticker_b=ticker_b)
+    tests = stationarity_tests(
+        path, beta=fit.beta, end=split_date, ticker_a=ticker_a, ticker_b=ticker_b
+    )
     is_run = run_strategy(
         path,
         fit.beta,
@@ -143,6 +152,8 @@ def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str,
         trade_from=idx[params.is_warmup - 1].date(),
         lag=params.lag,
         cost_bps=params.cost_bps,
+        ticker_a=ticker_a,
+        ticker_b=ticker_b,
     )
     oos_run = run_strategy(
         path,
@@ -153,6 +164,8 @@ def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str,
         trade_from=split_date,
         lag=params.lag,
         cost_bps=params.cost_bps,
+        ticker_a=ticker_a,
+        ticker_b=ticker_b,
     )
     out: dict[str, float] = {"beta": fit.beta, "eg_pvalue": tests.eg_pvalue}
     for name, run in (("is", is_run), ("oos", oos_run)):
@@ -164,7 +177,12 @@ def run_simulated_path(path: pd.DataFrame, params: BootstrapParams) -> dict[str,
     return out
 
 
-def simulate(prices: pd.DataFrame, params: BootstrapParams) -> pd.DataFrame:
+def simulate(
+    prices: pd.DataFrame,
+    params: BootstrapParams,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> pd.DataFrame:
     """Run all bootstrap paths.
 
     Parameters
@@ -173,19 +191,21 @@ def simulate(prices: pd.DataFrame, params: BootstrapParams) -> pd.DataFrame:
         Real aligned prices over the full history.
     params : BootstrapParams
         Simulation parameters.
+    ticker_a, ticker_b : str, optional
+        Legs A and B (defaults: INTC, AMD).
 
     Returns
     -------
     pd.DataFrame
         One row per path (index ``path``), columns of :func:`run_simulated_path`.
     """
-    prices = prices[[TICKER_A, TICKER_B]]
+    prices = prices[[ticker_a, ticker_b]]
     assert params.split_index < len(prices)
     rng = np.random.default_rng(params.seed)
     rows = []
     for k in range(params.n_paths):
         idx = bootstrap_indices(len(prices) - 1, params.block, rng)
-        rows.append(run_simulated_path(bootstrap_path(prices, idx), params))
+        rows.append(run_simulated_path(bootstrap_path(prices, idx), params, ticker_a, ticker_b))
         if (k + 1) % 50 == 0:
             logger.info("Simulated %d / %d paths", k + 1, params.n_paths)
     table = pd.DataFrame(rows)
@@ -193,7 +213,13 @@ def simulate(prices: pd.DataFrame, params: BootstrapParams) -> pd.DataFrame:
     return table
 
 
-def load_or_simulate(prices: pd.DataFrame, params: BootstrapParams, cache: Path) -> pd.DataFrame:
+def load_or_simulate(
+    prices: pd.DataFrame,
+    params: BootstrapParams,
+    cache: Path,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> pd.DataFrame:
     """Load the per-path table from ``cache`` if its parameters and data match, else compute it.
 
     Parameters
@@ -204,6 +230,8 @@ def load_or_simulate(prices: pd.DataFrame, params: BootstrapParams, cache: Path)
         Simulation parameters.
     cache : Path
         Pickle checkpoint, e.g. ``data/processed/simulation_paths.pkl``.
+    ticker_a, ticker_b : str, optional
+        Legs A and B (defaults: INTC, AMD).
 
     Returns
     -------
@@ -230,7 +258,7 @@ def load_or_simulate(prices: pd.DataFrame, params: BootstrapParams, cache: Path)
             table: pd.DataFrame = stored["table"]
             return table
         logger.warning("Checkpoint %s does not match the parameters or data: recomputing", cache)
-    table = simulate(prices, params)
+    table = simulate(prices, params, ticker_a, ticker_b)
     cache.parent.mkdir(parents=True, exist_ok=True)
     with cache.open("wb") as f:
         pickle.dump({"params": asdict(params), "data": fingerprint, "table": table}, f)
