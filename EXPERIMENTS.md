@@ -6,8 +6,9 @@ Every configuration tried (including failed ones) goes here: date and time, para
 Every access to the out-of-sample period must be logged explicitly.
 
 Counters
-- Backtest configurations tried on IS: 11 (Phase 2: 9 grid + 1 lag-2 robustness run; + 1 price-level robustness run)
-- OOS accesses: 1 (#1: static strategy, 2026-10-10 14:06 CEST)
+- Backtest configurations tried on IS: 14 (Phase 2: 9 grid + 1 lag-2 robustness run; + 1 price-level robustness run;
+  Kalman extension: 3 δ values)
+- OOS accesses: 2 (#1: static strategy, 2026-10-10 14:06 CEST; #2: Kalman δ = 1e-4, 2026-10-10 16:12 CEST)
 
 ---
 
@@ -657,3 +658,98 @@ percentile); the real IS Sharpe is in its lower tail (2.8th percentile), consist
 the real static-β spread (Phase 3: spread ≈ short AMD position) that the 20-day blocks do not preserve. The Engle–Granger
 test rejects at about its nominal rate under the null (5.2%), and the real p-value is high even by the null's standards.
 The percentiles are descriptive, not pre-registered hypothesis tests.
+
+---
+
+## 2026-10-10 16:10 CEST — Kalman extension: clarifications to the 14:05 pre-registration (BEFORE any Kalman computation)
+
+Two points not specified at 14:05, decided now with the user before writing or running any Kalman code. Nothing else in
+the 14:05 design changes.
+1. **Window moments of the z-score:** `var_L(a)`, `var_L(b)`, `cov_L(a, b)` are sample moments (ddof = 1), consistent
+   with the rolling standard deviation of Phase 2.
+2. **Static reference on the Kalman IS window** (from day index 252 to 2012-12-31): return-based metrics (annualized
+   return, volatility, Sharpe, max drawdown) from the existing Phase 2 daily returns cut to the window; trade-based
+   metrics (number of trades, win rate, durations) only on trades entered on or after the first day of the window — a
+   trade already open on that day is excluded and flagged. No new static backtest (no 15th IS backtest).
+
+Known property of the pre-registered design, to be reported with the results (not a change): the z-score of day t uses
+the filtered β_t, already updated with day t's prices, so the filter partly absorbs day t's deviation; this is not
+look-ahead (data up to t only) but can dampen the signal compared with a prediction-error z-score.
+
+---
+
+## 2026-10-10 16:12 CEST — Kalman extension: 3 IS runs (IS backtests #12–#14), design as pre-registered at 14:05 + 16:10
+
+**Period:** IS only (prices < 2013-01-01). OLS initialization on 1980-03-17 … (first 252 days); evaluation window
+**1981-03-17 … 2012-12-31**, starting flat. **Code:** `src/pairs/kalman.py`; tests in `tests/test_kalman.py` (known-β
+recovery, first filter step by hand, z-score vs brute force, P&L by hand, look-ahead test, OOS continuation of the IS
+filter). **IS backtest counter: 11 → 14.**
+
+| net unless stated | Kalman δ = 1e-5 | **Kalman δ = 1e-4 (main)** | Kalman δ = 1e-3 | static, same window |
+|---|---|---|---|---|
+| ann. return gross / net (%) | 3.05 / 2.65 | 3.39 / 2.99 | 4.55 / 4.13 | −7.62 / −7.95 |
+| ann. vol (%) | 20.12 | 20.35 | 20.27 | 22.14 |
+| Sharpe gross / net | 0.25 / 0.23 | 0.27 / 0.25 | 0.32 / 0.30 | −0.25 / −0.26 |
+| max DD net (%) | −68.28 | −70.79 | −69.71 | −96.21 |
+| trades | 124 (1 open at end) | 125 | 128 | 113 |
+| win rate net (%) | 67.74 | 68.00 | 70.31 | 53.98 |
+| avg / max duration (days) | 37.4 / 188 | 36.8 / 185 | 35.4 / 185 | 45.1 / 188 |
+| exposure (%) | 57.80 | 57.41 | 56.44 | 63.55 |
+| filtered β min / median / max | 0.166 / 0.423 / 0.899 | 0.116 / 0.383 / 0.890 | 0.023 / 0.370 / 0.846 | 1.047 (fixed) |
+
+Static reference: existing Phase 2 daily returns cut to the window; trade metrics on trades entered from 1981-03-17
+(no static trade was open on that day, so none excluded).
+
+**Reading (IS):** hedging with the filtered, local β turns the IS result from clearly negative (Sharpe −0.26) to
+positive (0.23–0.30 net), with little dependence on δ across two orders of magnitude. The filtered β (median ≈ 0.38)
+is close to the Phase 3 rolling β (median 0.39), far from the static 1.047. Drawdowns remain very large (≈ −70%).
+Caveats: this is in-sample; the motivation for the extension came from Phase 3, itself an IS analysis; known property of
+the design — the z-score uses β_t already updated with day t's prices (not look-ahead, may dampen the signal). The main
+configuration δ = 1e-4 now gets its single pre-registered OOS run, whatever this result.
+
+---
+
+## 2026-10-10 16:12 CEST — OOS access #2: single out-of-sample run of the Kalman strategy (written BEFORE computing)
+
+**Frozen configuration** (pre-registered 14:05, clarified 16:10, unchanged after the IS results): Kalman filter on log
+prices, V = 0.001, **δ = 1e-4**, initialized by OLS on the first 252 IS days; the filter **continues from its IS state
+without re-initialization** through the OOS; only the filtered β_t; z-score with β_t applied to the whole 60-day window
+(sample moments); entry ±2.0, exit at zero crossing, direct flip, no stop-loss; `shift(1)`; P&L with β_t; 5 bp per leg
+per position change; rf = 0.
+**Period:** 2013-01-01 to 2026-10-09; the strategy starts **flat** on the first OOS trading day; the z-score window may
+use the last 59 IS days. Static OOS reference: the existing result of OOS access #1 (no new static run).
+**Commitment:** single run; no parameter changed after it; δ = 1e-5 and 1e-3 are **not** run on the OOS.
+**OOS access counter: 2.**
+
+---
+
+## 2026-10-10 16:15 CEST — Result of OOS access #2 (Kalman δ = 1e-4) and Kalman summary
+
+**Notebook:** `notebooks/06_kalman.ipynb`. **Figures:** `reports/figures/06a_kalman_beta_is`,
+`06b_equity_kalman_vs_static_is`, `06c_equity_kalman_vs_static_oos` (.png/.html). Asserted in the notebook: the full-data
+filter coincides with the IS filter on the IS days (no re-initialization); the static OOS reference reproduces OOS access
+#1 (Sharpe net −0.18, 51 trades). Transparency note: the notebook was executed twice (the second time only to add a
+descriptive Sharpe-uncertainty cell); the OOS run is deterministic and the frozen configuration was not changed, so both
+executions give the identical result reported here.
+
+| OOS 2013-01-02 … 2026-10-09 | Kalman δ = 1e-4 | static (OOS access #1) |
+|---|---|---|
+| ann. return gross / net (%) | −0.62 / −1.01 | −6.22 / −6.56 |
+| ann. vol net (%) | 23.15 | 22.80 |
+| Sharpe gross / net | 0.09 / 0.07 | −0.16 / −0.18 |
+| max DD net (%) | −52.73 | −82.44 |
+| trades | 54 | 51 (1 open at end) |
+| win rate net (%) | 64.81 | 60.78 |
+| avg / max duration (days) | 41.0 / 140 | 40.8 / 132 |
+| exposure (%) | 63.89 | 60.05 |
+
+Filtered β in the OOS: min 0.052, median 0.186, max 0.505, last 0.475. Approximate 95% interval of the OOS net Sharpe
+(iid, Lo 2002; descriptive): Kalman −0.46 … 0.60; static −0.71 … 0.35 (13.7 years).
+
+**Reading:** in-sample the Kalman hedge turns the static strategy's loss into a modest gain (net Sharpe 0.23–0.30,
+little dependence on δ), but most of that gain is made before 1992 and drawdowns stay ≈ −70%. Out-of-sample it is better
+than the static strategy (net Sharpe +0.07 vs −0.18, drawdown −53% vs −82%) but not profitable (net return −1.0% a year)
+and not distinguishable from zero. Hedging with the local β removes most of the static strategy's losses — consistent
+with Phase 3 (the static spread is mostly an AMD position) — without revealing a tradable mean-reverting relationship.
+Known property of the pre-registered design reported with the results: the z-score uses β_t already updated with day t's
+prices, which may dampen the signal relative to a prediction-error z-score.
