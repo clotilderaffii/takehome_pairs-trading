@@ -9,3 +9,7 @@ class PairsError(Exception):
 
 class DataFetchError(PairsError):
     """Raised when input data is missing, unreadable or does not have the expected shape."""
+
+
+class InsufficientDataError(PairsError):
+    """Raised when there is not enough data before a cutoff to estimate or evaluate something."""
