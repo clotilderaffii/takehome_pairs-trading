@@ -1,13 +1,14 @@
 """Compute the in-sample / out-of-sample split date (70/30 rule).
 
-Rule: on the common history of INTC and AMD (dates where both have a
-non-missing Close), take the point at 70% of the history and round it to the
-nearest 1 January. Computed two ways (70% of trading days, 70% of calendar
+Rule: on the common history of the two tickers (default INTC and AMD; dates where
+both have a non-missing Close), take the point at 70% of the history and round it to
+the nearest 1 January. Computed two ways (70% of trading days, 70% of calendar
 time) to check that the rounding makes the choice unambiguous.
 
 Only dates are logged, never prices.
 
 Usage: uv run python scripts/compute_split_date.py
+       uv run python scripts/compute_split_date.py --tickers KO PEP
 """
 
 from __future__ import annotations

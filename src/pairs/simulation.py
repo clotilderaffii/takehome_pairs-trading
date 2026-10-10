@@ -72,7 +72,7 @@ def bootstrap_indices(n_returns: int, block: int, rng: np.random.Generator) -> n
     Notes
     -----
     The same indices are applied to both stocks, so each simulated day takes the returns of
-    INTC and AMD from the *same* historical date.
+    both stocks from the *same* historical date.
     """
     assert 0 < block <= n_returns
     n_blocks = math.ceil(n_returns / block)

@@ -17,7 +17,7 @@ from pairs.exceptions import InsufficientDataError
 
 logger = logging.getLogger(__name__)
 
-#: Below this value the AMD leg hedges too little of INTC's moves to call the book a pair.
+#: Below this value the B leg hedges too little of the A leg's moves to call the book a pair.
 BETA_WARNING_THRESHOLD: float = 0.1
 
 
@@ -28,10 +28,10 @@ class HedgeFit:
     Attributes
     ----------
     alpha : float
-        Intercept: the log of INTC's price level when AMD's log price is 0. It only
+        Intercept: the log of A's price level when B's log price is 0. It only
         shifts the spread level and does not affect the z-score.
     beta : float
-        Hedge ratio: a 1% move in AMD goes with a beta% move in INTC on average.
+        Hedge ratio: a 1% move in B goes with a beta% move in A on average.
     r_squared : float
         Share of the variance of ``log P_A`` explained by ``log P_B``.
     n_obs : int

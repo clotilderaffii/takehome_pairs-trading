@@ -1074,3 +1074,50 @@ but searching ~39 windows of a history this long finds at least one "cointegrate
 best window typically shows a net Sharpe around 0.8. The impression of a 1997–2004 link is what chance routinely produces
 when a long history is searched. Caveats: 200 of 500 paths; starts every 252 days (a finer search would raise (b) and
 (d)); the null is the Phase 5 bootstrap world.
+
+---
+
+# Final repository clean-up
+
+## 2026-10-10 19:20 CEST — Planned descriptive additions (declared BEFORE computing them)
+
+No new backtest, no OOS access, no simulation run; counters unchanged (INTC/AMD: 14 IS backtests, 2 OOS accesses,
+2 simulation runs; KO/PEP appendix: 9 IS backtests, 1 OOS access, 1 simulation run). Purely descriptive additions,
+computed from data and results already used:
+1. KO/PEP appendix: chart of the IS z-score of the main configuration (L = 60, ±2 thresholds), as for INTC/AMD.
+2. Notebook 01: the IS return-correlation table recomputed with log returns, next to the simple-return table.
+3. Notebook 02: a two-panel chart (same y-axis) of the rolling z-score (L = 60) of the INTC/AMD IS spread and of the
+   synthetic negative control's spread (random-walk residual, seed 2026, `pairs.synthetic`), with explanatory text;
+   and a text-only update of the R² bullet.
+Also: docstring/comment text fixes, a README, script docstrings, and a full re-execution of all notebooks on a
+temporary copy to check reproducibility. Results are recorded in a closing entry.
+
+## 2026-10-10 19:29 CEST — Clean-up results (descriptive additions, no new attempt)
+
+Counters unchanged (INTC/AMD: 14 IS backtests, 2 OOS accesses, 2 simulation runs; KO/PEP appendix: 9, 1, 1).
+
+**Descriptive additions:**
+- `notebooks/appendix_kopep.ipynb`: IS z-score chart of the main configuration (L = 60, ±2), inserted after the IS spread;
+  figure `reports/figures/appx_j_kopep_zscore_main_is.{png,html}`.
+- `notebooks/01_data.ipynb`: IS return correlations with log returns next to the simple-return table: All 0.4804 (simple
+  0.4832), 1980s 0.5592 (0.5565), 1990s 0.3255 (0.3301), 2000s 0.5387 (0.5452), 2010–2012 0.5849 (0.5847); largest
+  absolute difference 0.0065. Text explains why the backtest uses simple returns (additive across legs) and the bootstrap
+  log returns (additive over time).
+- `notebooks/02_signal.ipynb`: R² bullet of "1. Hedge regression (IS)" rewritten (text only); after the z-score chart, a
+  text cell on why the rolling z-score always looks mean-reverting, and the two-panel chart "Rolling z-score: INTC/AMD vs
+  a pure random-walk spread" (INTC/AMD IS spread; synthetic negative control of notebook 00, seed 2026, spread with the
+  β fitted on its first half, IS half shown), figure `reports/figures/02h_zscore_intc_amd_vs_random_walk.{png,html}`.
+
+**Text-only code changes:** generic wording in docstrings/comments of `src/pairs/spread.py`, `simulation.py`,
+`synthetic.py`, `stability.py`, `scripts/compute_split_date.py` (log messages untouched). All scripts already had a
+docstring with purpose and usage (KO/PEP usage example added to `compute_split_date.py`); none is superseded, nothing
+moved to `archive/`. New `README.md`.
+
+**Checks.** (1) After the additions, the pre-existing cells of notebooks 01, 02 and the appendix are identical to the
+committed version (source and outputs per stream), except the edited R² markdown cell; no existing PNG changed; modified
+HTML files differ only in Plotly's random element ids. Several in-place executions first failed with the transient
+Windows file lock seen earlier today and succeeded on retry with unchanged code. (2) **Full reproducibility:** all 9
+notebooks (00, 01, 02, 02c, 03, 04, 05, 06, appendix) re-executed from a clean kernel on a temporary copy of the project:
+every cell identical to the repository (stdout and stderr compared separately), and all **35 PNGs byte-identical**
+("ALL IDENTICAL"). The simulation checkpoints in `data/processed/` were reloaded, not recomputed. (3) ruff, mypy: clean;
+pytest: 99 passed.

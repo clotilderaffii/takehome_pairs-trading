@@ -1,4 +1,4 @@
-"""Phase 3: stability of the INTC/AMD relationship and flagging of weak-relationship periods.
+"""Phase 3: stability of a pair's relationship and flagging of weak-relationship periods.
 
 Method (the brief's "medium" option): rolling OLS hedge ratio and rolling ADF test on the
 spread built with each window's own beta, on log prices.

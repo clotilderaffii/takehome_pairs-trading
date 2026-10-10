@@ -117,7 +117,7 @@ def run_pipeline_control(
     cost_bps: float = 5.0,
     lag: int = 1,
 ) -> ControlResult:
-    """Run the exact INTC/AMD pipeline on a price pair, first half IS and second half OOS.
+    """Run the project's Phase 2 pipeline on a price pair, first half IS and second half OOS.
 
     Parameters
     ----------
