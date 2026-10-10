@@ -1121,3 +1121,45 @@ notebooks (00, 01, 02, 02c, 03, 04, 05, 06, appendix) re-executed from a clean k
 every cell identical to the repository (stdout and stderr compared separately), and all **35 PNGs byte-identical**
 ("ALL IDENTICAL"). The simulation checkpoints in `data/processed/` were reloaded, not recomputed. (3) ruff, mypy: clean;
 pytest: 99 passed.
+
+---
+
+## 2026-10-10 20:38 CEST — Post-review notes (no new attempt, counters unchanged)
+
+No parameter changed, no backtest or simulation re-run as a new attempt, no OOS access, no change to `src/`.
+
+**(i) What the record can and cannot prove.** Each pre-registration was committed to git together with its results, so
+the git history does not prove that pre-registrations preceded the computations; the order rests on the timestamps
+written in this log. The short intervals between some pre-registrations and their results (minutes) reflect that the
+code was written and run by Claude Code within minutes. The 16:10 statement that the clarifications were decided
+"before writing or running any Kalman code" cannot be verified from the git history.
+
+**(ii) Complete count of attempts** (as in `WRITEUP.md`):
+- INTC/AMD: 14 IS backtests, 2 OOS runs, 2 simulation runs (the look-elsewhere run includes one backtest on the real
+  1997–2004 window);
+- KO/PEP: 9 IS backtests, 1 OOS run, 1 simulation run;
+- 2 synthetic control runs.
+
+**(iii) Limitations.**
+- Short-borrow costs are not modelled (nor the Kalman's rebalancing costs, already declared).
+- The first IS trade inherits the signal state from before `trade_from`: the state machine runs on the whole history,
+  signals before `trade_from` are zeroed, so a position already "on" in the signal becomes active right after the
+  window starts (one trade; the OOS runs start flat).
+- Some cells of the IS notebooks were added after the OOS runs (descriptive additions, logged as such, e.g. the
+  19:20/19:29 clean-up entries); they do not change any pre-registered result.
+
+**(iv) Revisions of interpretation (text only, numbers unchanged).**
+- Kalman (`notebooks/06_kalman.ipynb`, "Conclusion" bullet revised). A post-review descriptive cell, on the daily
+  results already computed, shows that the traded Kalman spread-leg return `(r_INTC − β·r_AMD)/(1 + |β|)`, with the β
+  used for each day's P&L, has correlation **0.942 with INTC and 0.112 with AMD OOS** (0.805 and −0.089 IS; median β used
+  0.186 OOS, 0.383 IS), and that the Kalman δ = 1e-4 IS net Sharpe is **0.806 in 1981–1991 and −0.008 in 1992–2012**.
+  Revised reading: with a local β around 0.2 the extension replaces a bet on AMD with a bet on INTC rather than
+  confirming the Phase 3 diagnosis; its IS Sharpe comes from the early years; its OOS Sharpe is indistinguishable from
+  zero; and the OOS is not blind to the declared prior knowledge (AMD's outperformance after 2015), since a lower β
+  mechanically reduces the AMD exposure.
+- Short interest (`notebooks/04_short_interest.ipynb`, settlement-date bullet revised). The pre-registered
+  publication-date alignment compares the spread move with positions measured about 7 business days earlier, so it is
+  neither contemporaneous nor usable in real time. For the brief's descriptive question the natural alignment is the
+  settlement date: Q2 ρ = 0.577, unrounded p = 0.00394, below the Bonferroni threshold over all 10 correlations computed
+  (0.05 / 10 = 0.005). Reported as an association in one year of data (23 points), not a trading signal; this revises the
+  earlier reading that treated it only as a hypothesis.

@@ -36,10 +36,10 @@ Pre-registrations were committed together with their results, so git alone canno
 - **Phase 3 — rolling β + rolling ADF**, because the diagnosis needed the hedge ratio itself. On INTC/AMD the static β
   is far above the local one, so the spread moves mostly with AMD (correlation −0.75). This is consistent with the
   losses, but not proof.
-- **Phase 4 — INTC/AMD only.** The publication-date alignment I pre-registered was the wrong choice: it is neither
-  contemporaneous nor usable in real time. At settlement dates, relative short interest moved with the spread
-  (ρ = 0.58, p = 0.004, which survives Bonferroni over 10 tests). This is an association in one year of data, not a
-  signal. I did not run Phase 4 on KO/PEP because the Nasdaq data do not cover KO (NYSE-listed).
+- **Phase 4 — short interest.** My pre-registered
+  publication-date alignment compares the spread with positions from a week earlier, so it found nothing. At
+  settlement dates, relative short interest moved with the spread (ρ = 0.58, p = 0.004): an association in one year
+  of data, not a signal.
 - **Phase 5 — block bootstrap rather than OU**, because Phase 2 finds no mean reversion to simulate. The null is
   "no link beyond 20 days".
   - KO/PEP's in-sample profit is about what this null already earns (median 0.32).

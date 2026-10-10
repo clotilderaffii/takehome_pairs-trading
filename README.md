@@ -1,5 +1,7 @@
 # INTC / AMD pairs trading — BlackSwan Quants take-home
 
+**Start here: `notebooks/summary.ipynb` — a short guided tour of the results; the other notebooks contain the full analysis.**
+
 **Goal.** Test, as honestly as possible, whether the INTC/AMD price relationship supports a mean-reversion (pairs trading)
 signal: build the spread, trade a rolling z-score, and validate it with a pre-fixed in-sample / out-of-sample split
 (IS < 2013-01-01 ≤ OOS), pre-registered parameter grids, a single OOS run per strategy, stability diagnostics and
