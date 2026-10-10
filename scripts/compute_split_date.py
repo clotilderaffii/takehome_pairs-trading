@@ -12,6 +12,7 @@ Usage: uv run python scripts/compute_split_date.py
 
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
 
@@ -31,12 +32,17 @@ def nearest_jan_first(ts: pd.Timestamp) -> pd.Timestamp:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tickers", nargs=2, default=["INTC", "AMD"], metavar=("A", "B"))
+    args = parser.parse_args()
+    ticker_a, ticker_b = args.tickers
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     closes = {
         t: pd.read_pickle(RAW_DIR / f"{t}_daily_yahoo.pkl")["Close"].dropna()
-        for t in ("INTC", "AMD")
+        for t in (ticker_a, ticker_b)
     }
-    common = closes["INTC"].index.intersection(closes["AMD"].index).sort_values()
+    common = closes[ticker_a].index.intersection(closes[ticker_b].index).sort_values()
     n = len(common)
     first, last = common[0], common[-1]
 

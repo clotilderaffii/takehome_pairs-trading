@@ -101,6 +101,22 @@ def test_run_strategy_respects_end(coint_prices: pd.DataFrame) -> None:
     assert not run.daily[["position", "net_ret"]].isna().to_numpy().any()
 
 
+def test_run_strategy_with_other_tickers_matches_default(coint_prices: pd.DataFrame) -> None:
+    renamed = coint_prices.rename(columns={"INTC": "KO", "AMD": "PEP"})
+    default = run_strategy(coint_prices, beta=0.8, entry=2.0, lookback=60, end=date(2100, 1, 1))
+    other = run_strategy(
+        renamed,
+        beta=0.8,
+        entry=2.0,
+        lookback=60,
+        end=date(2100, 1, 1),
+        ticker_a="KO",
+        ticker_b="PEP",
+    )
+    pd.testing.assert_frame_equal(default.daily, other.daily)
+    pd.testing.assert_frame_equal(default.trades, other.trades)
+
+
 def test_run_strategy_makes_money_on_cointegrated_data(coint_prices: pd.DataFrame) -> None:
     run = run_strategy(coint_prices, beta=0.8, entry=2.0, lookback=60, end=date(2100, 1, 1))
     assert len(run.trades) > 5

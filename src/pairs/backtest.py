@@ -211,6 +211,8 @@ def run_strategy(
     lag: int = 1,
     cost_bps: float = DEFAULT_COST_BPS,
     use_logs: bool = True,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
 ) -> StrategyRun:
     """Run spread -> z-score -> positions -> backtest -> trades for one configuration.
 
@@ -235,6 +237,8 @@ def run_strategy(
     use_logs : bool, optional
         True (main design): log spread and constant capital weights. False: price spread
         and constant share counts (price-level robustness run).
+    ticker_a, ticker_b : str, optional
+        Legs A and B (defaults: INTC, AMD).
 
     Returns
     -------
@@ -243,11 +247,19 @@ def run_strategy(
     """
     cut = prices[prices.index < pd.Timestamp(end)]
     assert cut.index.max() < pd.Timestamp(end)
-    spread = compute_spread(cut, beta, use_logs=use_logs)
+    spread = compute_spread(cut, beta, ticker_a, ticker_b, use_logs=use_logs)
     z = rolling_zscore(spread, lookback)
     signal = positions_from_zscore(z, entry)
     daily = run_backtest(
-        cut, beta, signal, cost_bps=cost_bps, lag=lag, trade_from=trade_from, use_logs=use_logs
+        cut,
+        beta,
+        signal,
+        cost_bps=cost_bps,
+        lag=lag,
+        trade_from=trade_from,
+        ticker_a=ticker_a,
+        ticker_b=ticker_b,
+        use_logs=use_logs,
     )
     daily = daily.join(spread).join(z)
     trades = extract_trades(daily, cost_bps=cost_bps)

@@ -753,3 +753,155 @@ and not distinguishable from zero. Hedging with the local β removes most of the
 with Phase 3 (the static spread is mostly an AMD position) — without revealing a tradable mean-reverting relationship.
 Known property of the pre-registered design reported with the results: the z-score uses β_t already updated with day t's
 prices, which may dampen the signal relative to a prediction-error z-score.
+
+---
+
+# Appendix: second pair (KO/PEP)
+
+This appendix does **not** replace INTC/AMD, which remains the pair of the project. It has its own counters; the
+project counters above are unaffected.
+
+Appendix counters
+- Appendix IS backtests: 0 (9 planned)
+- Appendix OOS accesses: 0 (1 planned)
+
+## 2026-10-10 17:03 CEST — Appendix pre-registration (written BEFORE downloading or looking at any KO/PEP price)
+
+**Disclosure.** This second pair was added **after** seeing the negative result on INTC/AMD, to test the pipeline on a
+pair with an economic reason to be cointegrated. KO/PEP was chosen because the brief names it "the classic textbook
+pair", not because of its results, which have not been looked at. Prior knowledge: the user has no information on the
+recent performance of the two companies.
+
+**Design (fixed now, identical to the main project; Phases 1–2 only).**
+- Pair: **A = KO, B = PEP** (order fixed now, will not be inverted). Regression `log P_KO = α + β · log P_PEP + ε`.
+- Data: Yahoo Finance via yfinance, `period="max"`, `interval="1d"`, `auto_adjust=True`, saved in `data/raw/`
+  (`KO_daily_yahoo.pkl`, `PEP_daily_yahoo.pkl`, metadata `prices_metadata_KO_PEP.json`).
+- Split: same rule — 70% of the common history (dates where both have a close), rounded to the nearest 1 January;
+  computed showing **only dates**. IS = dates < split, OOS = dates ≥ split.
+- Spread and signal: OLS on log prices estimated on the IS only; ADF and Engle–Granger on the IS; main configuration
+  e = 2.0, L = 60, exit at zero crossing, direct flip, no stop-loss, `shift(1)`, 5 bp per leg per position change, rf = 0;
+  same metrics as Phase 2. IS evaluation window from the first day with an L = 120 z-score, as in Phase 2.
+- Grid 3×3 (e ∈ {1.5, 2.0, 2.5} × L ∈ {20, 60, 120}) on the IS only, as a sensitivity measure; the main configuration
+  stays e = 2.0, L = 60 whatever the result. **9 appendix IS backtests** (the grid includes the main configuration);
+  no other check (no lag-2 or price-level run).
+- **One OOS run** of the main configuration with β frozen from the IS, starting flat on the first OOS day, whatever the
+  IS result. **1 appendix OOS access.**
+- No Phases 3–5 and no Kalman for KO/PEP: this is only a test of the Phase 1–2 pipeline.
+- Charts: prices (log scale) and the KO/PEP ratio up to the split only, until the OOS run; full-history versions with
+  the split line added after the OOS run, leaving the IS versions unchanged.
+
+**Code changes allowed:** generalizations with defaults identical to the current behaviour (tickers as parameters).
+Control: after any change, all tests and notebooks 01–06 are re-executed on a temporary copy of the project and their
+outputs and PNGs compared with the committed ones; any difference stops the work.
+
+## 2026-10-10 17:08 CEST — Appendix: code generalization check, KO/PEP download and split date (dates only)
+
+**Code changes** (defaults unchanged): `run_strategy` gained `ticker_a`/`ticker_b` (default INTC/AMD), passed to
+`compute_spread` and `run_backtest`; new test `test_run_strategy_with_other_tickers_matches_default`.
+`scripts/fetch_prices.py` gained `--tickers`/`--meta` (defaults INTC AMD / `prices_metadata.json`) and now refuses to
+overwrite existing raw files or metadata; `scripts/compute_split_date.py` gained `--tickers` (default INTC AMD).
+
+**INTC/AMD unchanged — control result.** pytest: 94 passed. Notebooks 00, 01, 02, 02c, 03, 04, 05, 06 re-executed on a
+temporary copy of the project (code of the copy imported via PYTHONPATH, figures written inside the copy; the committed
+notebooks and figures were not touched). All 22 PNG files byte-identical to the committed ones; all embedded images
+identical; all text outputs identical except one pre-existing pandas `UserWarning` in `02_signal` whose text contains
+the name of the kernel's temporary file (`ipykernel_24568` vs `ipykernel_29328`, different at every execution); after
+normalizing that file name, all text outputs of all 8 notebooks are identical. A first attempt of the control failed
+to execute (the notebooks' kernel ran outside the project environment: `No module named 'pandas'`); it produced no
+outputs and was re-run with `uv run`.
+
+**KO/PEP data:** Yahoo Finance via yfinance 1.7.0, `auto_adjust=True`. KO: 16,302 rows, 1962-01-02 … 2026-10-09;
+PEP: 13,703 rows, 1972-06-01 … 2026-10-09. Files `data/raw/KO_daily_yahoo.pkl`, `data/raw/PEP_daily_yahoo.pkl`,
+`data/raw/prices_metadata_KO_PEP.json`. Only dates and row counts were printed.
+
+**Split (same 70% rule, only dates shown):**
+
+| Item | Value |
+|---|---|
+| First common date | 1972-06-01 |
+| Last common date | 2026-10-09 |
+| Common trading days | 13,703 |
+| 70% point (trading days) | 2010-06-08 → 2010-01-01 |
+| 70% point (calendar) | 2010-06-19 → 2010-01-01 |
+| **Split date** | **2010-01-01** |
+| IS (1972-06-01 … 2009-12-31) | 9,485 days (69.2%) |
+| OOS (2010-01-01 … 2026-10-09) | 4,218 days (30.8%) |
+
+The two methods agree: **KO/PEP split = 2010-01-01**.
+
+## 2026-10-10 17:10 CEST — Appendix: KO/PEP in-sample results (appendix IS backtests #1–#9)
+
+**Period:** IS, 1972-06-01 … 2009-12-31 (9,485 common days; 2,599 KO-only days before 1972-06-01 dropped by the
+alignment). Evaluation window 1972-11-20 … 2009-12-31 (first day with an L = 120 z-score). No OOS data loaded.
+**Notebook:** `notebooks/appendix_kopep.ipynb` (IS part). **Figures:** `reports/figures/appx_a_kopep_prices_ratio_is`,
+`appx_b_kopep_spread_is`, `appx_c_kopep_sharpe_heatmap_is`, `appx_d_kopep_equity_is` (.png/.html).
+**Appendix IS backtest counter: 9** (the pre-registered grid; nothing else run).
+
+**Hedge regression (log prices):** α = −0.5909, β = 0.9805 (> 0, PEP acts as a hedge), R² = 0.9753.
+**Stationarity of the IS spread:** ADF stat −2.156, p = 0.223 (16 lags); Engle–Granger stat −2.156, p = 0.447.
+Descriptive: AR(1) b = −0.00180, half-life ≈ 386 trading days. → **No significant evidence of cointegration at 5%
+over 1972–2009**, although far closer to it than INTC/AMD (EG p 0.447 vs 0.975; half-life ≈ 1.5 years vs ≈ 27).
+
+**Grid (net unless stated):**
+
+| e | L | ann. ret gross / net (%) | vol (%) | Sharpe gross / net | max DD net (%) | trades | win rate net (%) | avg / max dur. | exposure (%) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1.5 | 20 | 10.32 / 8.76 | 10.69 | 0.97 / 0.84 | −23.09 | 530 | 75.85 | 11.2 / 76 | 63.39 |
+| 1.5 | 60 | 7.03 / 6.37 | 10.68 | 0.69 / 0.63 | −20.48 | 229 | 79.48 | 26.2 / 173 | 64.06 |
+| 1.5 | 120 | 5.11 / 4.72 | 10.57 | 0.52 / 0.49 | −21.45 | 136 | 77.21 | 44.8 / 201 | 65.09 |
+| 2.0 | 20 | 9.21 / 8.18 | 9.24 | 1.00 / 0.90 | −20.57 | 351 | 77.49 | 12.0 / 72 | 45.13 |
+| **2.0** | **60** | **5.75 / 5.28** | **9.82** | **0.62 / 0.57** | **−19.50** | **166** | **77.71** | **30.0 / 172** | **53.17** |
+| 2.0 | 120 | 4.10 / 3.81 | 9.89 | 0.46 / 0.43 | −21.45 | 102 | 77.45 | 51.3 / 201 | 55.92 |
+| 2.5 | 20 | 4.82 / 4.40 | 6.39 | 0.77 / 0.71 | −19.50 | 151 | 76.16 | 12.9 / 60 | 20.81 |
+| 2.5 | 60 | 4.04 / 3.76 | 7.98 | 0.54 / 0.50 | −24.81 | 101 | 77.23 | 32.1 / 172 | 34.60 |
+| 2.5 | 120 | 2.62 / 2.45 | 8.54 | 0.35 / 0.33 | −26.70 | 63 | 77.78 | 60.1 / 200 | 40.40 |
+
+Every configuration has one trade open on 2009-12-31 (checked: a short-spread position entered in Nov–Dec 2009 in all
+nine; with L = 20 the exit signal comes on 2009-12-31 itself and would execute in 2010), closed there for the trade
+statistics.
+
+**Reading (IS):** unlike INTC/AMD, the main configuration earns in-sample (net Sharpe 0.57, +5.3% a year, max drawdown
+−19.5%) and **all nine** configurations are positive (net Sharpe 0.33–0.90): the result is not fragile to the
+parameters; shorter lookbacks do better. This happens although the Engle–Granger test does not reject at 5%: the spread
+wanders in multi-year swings (half-life ≈ 1.5 years), but the rolling z-score captures shorter-term reversion around
+them. The main configuration now gets its single OOS run, whatever this result.
+
+## 2026-10-10 17:10 CEST — Appendix OOS access #1: single OOS run of KO/PEP (written BEFORE computing)
+
+**Frozen configuration:** log prices; β = 0.9805 estimated on the KO/PEP IS (dates < 2010-01-01) and not
+re-estimated; e = 2.0, L = 60, exit at zero crossing, direct flip, no stop-loss; `shift(1)`; 5 bp per leg per position
+change; rf = 0. **Period:** 2010-01-01 to the last available date (2026-10-09); the z-score may use the last 59 IS days
+as warm-up; the strategy starts **flat** on the first OOS trading day. **Commitment:** single run, no parameter changed
+after it; the other grid configurations are not run on the OOS. Afterwards (descriptive only): ADF / Engle–Granger on
+the OOS spread, and full-history versions of the price and ratio charts with the split line.
+**Appendix OOS access counter: 1.**
+
+## 2026-10-10 17:12 CEST — Appendix: result of OOS access #1 (KO/PEP) and summary
+
+**Notebook:** `notebooks/appendix_kopep.ipynb` (sections 4–5 appended; IS cells unchanged, IS PNGs byte-identical after
+re-execution). **Figures:** `reports/figures/appx_e_kopep_equity_oos`, `appx_f_kopep_prices_ratio_full` (.png/.html).
+Transparency note: the notebook was executed twice after the OOS section was added — the second time only to fix the
+y-axis ticks of the OOS equity chart (they fell outside the data range). The OOS run is deterministic and the frozen
+configuration was not changed; all table outputs were checked identical between the two executions.
+
+| e = 2.0, L = 60, lag 1 | IS (1972-11-20 … 2009-12-31) | OOS (2010-01-04 … 2026-10-09) |
+|---|---|---|
+| ann. return gross / net (%) | 5.75 / 5.28 | −0.99 / −1.35 |
+| ann. vol net (%) | 9.82 | 5.60 |
+| Sharpe gross / net | 0.62 / 0.57 | −0.15 / −0.21 |
+| max DD gross / net (%) | −19.42 / −19.50 | −27.16 / −28.39 |
+| trades | 166 (1 open at end) | 62 (1 open at end) |
+| win rate net (%) | 77.71 | 62.90 |
+| avg / max duration (days) | 30.0 / 172 | 41.0 / 121 |
+| exposure (%) | 53.17 | 60.24 |
+
+**Descriptive OOS tests:** ADF on the OOS spread with the frozen β: stat −0.124, p = 0.947 (9 lags); Engle–Granger on OOS
+log prices (own β): stat 0.533, p = 0.993.
+
+**Reading:** KO/PEP is not cointegrated at 5% in the IS (EG p = 0.447), but the main configuration earns in-sample and
+the whole 3×3 grid is positive (net Sharpe 0.33–0.90). The single OOS run loses (net Sharpe −0.21, −1.35% a year,
+max drawdown −28%): roughly flat to positive until 2021, then the largest losses in 2025–2026, while the KO/PEP ratio
+rose sharply and the strategy was short the spread. The pipeline therefore does produce in-sample profits on a pair
+whose spread reverts on short horizons (and recovers genuine cointegration on synthetic data), so the INTC/AMD failure
+is not a pipeline artefact; and a robust IS grid on the textbook pair still did not survive its single OOS test. No
+INTC/AMD conclusion changes. Appendix counters at the end: **9 IS backtests, 1 OOS access** (as planned).
