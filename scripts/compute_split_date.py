@@ -33,7 +33,8 @@ def nearest_jan_first(ts: pd.Timestamp) -> pd.Timestamp:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     closes = {
-        t: pd.read_pickle(RAW_DIR / f"{t}_daily_yahoo.pkl")["Close"].dropna() for t in ("INTC", "AMD")
+        t: pd.read_pickle(RAW_DIR / f"{t}_daily_yahoo.pkl")["Close"].dropna()
+        for t in ("INTC", "AMD")
     }
     common = closes["INTC"].index.intersection(closes["AMD"].index).sort_values()
     n = len(common)
@@ -48,9 +49,13 @@ def main() -> None:
     logger.info("first common date   : %s", first.date())
     logger.info("last common date    : %s", last.date())
     logger.info("70%% point (days)    : %s -> rounded %s", by_count.date(), split_count.date())
-    logger.info("70%% point (calendar): %s -> rounded %s", by_calendar.date(), split_calendar.date())
+    logger.info(
+        "70%% point (calendar): %s -> rounded %s", by_calendar.date(), split_calendar.date()
+    )
     n_is = int((common < split_count).sum())
-    logger.info("IS days < split: %d (%.1f%%), OOS days >= split: %d", n_is, 100 * n_is / n, n - n_is)
+    logger.info(
+        "IS days < split: %d (%.1f%%), OOS days >= split: %d", n_is, 100 * n_is / n, n - n_is
+    )
 
 
 if __name__ == "__main__":

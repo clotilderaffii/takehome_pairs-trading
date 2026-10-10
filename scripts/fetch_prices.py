@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -42,7 +42,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     meta: dict[str, object] = {
-        "downloaded_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "downloaded_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
         "source": "Yahoo Finance via yfinance",
         "yfinance_version": yf.__version__,
         "pandas_version": pd.__version__,
@@ -61,7 +61,9 @@ def main() -> None:
             "columns": list(map(str, df.columns)),
         }
         meta["tickers"][ticker] = info  # type: ignore[index]
-        logger.info("%s: %d rows, %s -> %s", ticker, info["rows"], info["first_date"], info["last_date"])
+        logger.info(
+            "%s: %d rows, %s -> %s", ticker, info["rows"], info["first_date"], info["last_date"]
+        )
     (RAW_DIR / "prices_metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

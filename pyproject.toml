@@ -1,14 +1,62 @@
 [project]
 name = "challenge-bsq"
 version = "0.1.0"
+description = "BlackSwan Quants take-home: INTC/AMD pairs trading research"
 requires-python = ">=3.12"
 dependencies = [
     "jupyter>=1.1.1",
+    "kaleido>=1.5.0",
     "matplotlib>=3.11.2",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
+    "plotly>=7.1.0",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
     "statsmodels>=0.15.0",
     "yfinance>=1.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pairs"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "N", "D", "SIM", "NPY"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+"scripts/*" = ["D"]
+"notebooks/*" = ["D", "E402"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ["yfinance.*", "statsmodels.*", "plotly.*", "kaleido.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pandas-stubs>=3.0.5.260914",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
 ]
