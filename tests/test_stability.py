@@ -8,7 +8,13 @@ import pytest
 
 from pairs.exceptions import InsufficientDataError
 from pairs.spread import log_prices
-from pairs.stability import regime_comparison, rolling_adf, rolling_beta, weak_flag
+from pairs.stability import (
+    regime_comparison,
+    rolling_adf,
+    rolling_beta,
+    spread_leg_correlations,
+    weak_flag,
+)
 from tests.conftest import TRUE_BETA, make_cointegrated_prices
 
 FAR_END = date(2100, 1, 1)
@@ -94,6 +100,29 @@ def test_flag_does_not_look_ahead() -> None:
     flag1 = weak_flag(adf1, pd.DatetimeIndex(tampered.index))
     # The flag on day d itself uses data up to d-1 only, so it is unchanged too.
     pd.testing.assert_series_equal(flag0.loc[:d], flag1.loc[:d])
+
+
+def test_spread_leg_correlations() -> None:
+    rng = np.random.default_rng(13)
+    n = 2000
+    idx = pd.bdate_range("1998-01-01", periods=n)
+    # Independent legs: with beta = 0 the spread change is INTC's own log return.
+    prices = pd.DataFrame(
+        {
+            "INTC": np.exp(3 + np.cumsum(rng.normal(0, 0.02, n))),
+            "AMD": np.exp(3 + np.cumsum(rng.normal(0, 0.02, n))),
+        },
+        index=idx,
+    )
+    t0 = spread_leg_correlations(prices, beta=0.0, end=FAR_END)
+    assert list(t0.index) == ["All", "1990s", "2000s"]
+    assert t0.loc["All", "corr_with_INTC"] == pytest.approx(1.0, abs=1e-3)
+    assert abs(t0["corr_with_AMD"].to_numpy(dtype=float)[0]) < 0.1  # row 0 = "All"
+    assert t0.loc["All", "n_days"] == n - 1
+    assert t0["n_days"].iloc[1:].sum() == n - 1
+    # A large beta makes the spread mostly a short position in AMD.
+    t5 = spread_leg_correlations(prices, beta=5.0, end=FAR_END)
+    assert t5["corr_with_AMD"].to_numpy(dtype=float)[0] < -0.95  # row 0 = "All"
 
 
 def test_regime_comparison_by_hand() -> None:

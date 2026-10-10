@@ -215,6 +215,60 @@ def weak_flag(
     return flag
 
 
+def spread_leg_correlations(
+    prices: pd.DataFrame,
+    beta: float,
+    end: date,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> pd.DataFrame:
+    """Correlate the daily change of the static-beta log spread with each leg's daily return.
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        Aligned adjusted prices.
+    beta : float
+        Static hedge ratio defining the spread ``log P_A − beta · log P_B``.
+    end : date
+        Exclusive cutoff, applied first.
+    ticker_a, ticker_b : str, optional
+        Legs A and B.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by period (``"All"``, then ``"1980s"``, ...), columns ``n_days``,
+        ``corr_with_<ticker_b>`` and ``corr_with_<ticker_a>`` (Pearson, simple daily returns).
+
+    Notes
+    -----
+    Diagnostic for the hypothesis that the static-beta spread behaves like a position in
+    one leg: a well-hedged spread should be only weakly correlated with either leg.
+    """
+    cut = prices[prices.index < pd.Timestamp(end)][[ticker_a, ticker_b]]
+    assert cut.index.max() < pd.Timestamp(end)
+    logp = log_prices(cut)
+    d_spread = (logp[ticker_a] - beta * logp[ticker_b]).diff().iloc[1:]
+    rets = cut.pct_change().iloc[1:]
+    idx = rets.index
+    assert isinstance(idx, pd.DatetimeIndex)
+
+    def _row(mask: np.ndarray) -> dict[str, float]:
+        ds, r = d_spread[mask], rets[mask]
+        return {
+            "n_days": float(mask.sum()),
+            f"corr_with_{ticker_b}": float(ds.corr(r[ticker_b])),
+            f"corr_with_{ticker_a}": float(ds.corr(r[ticker_a])),
+        }
+
+    rows = {"All": _row(np.ones(len(idx), dtype=bool))}
+    decades = (idx.year // 10) * 10
+    for decade in sorted(set(decades)):
+        rows[f"{decade}s"] = _row(np.asarray(decades == decade))
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
 def regime_comparison(
     daily: pd.DataFrame, trades: pd.DataFrame, flag: pd.Series
 ) -> RegimeComparison:

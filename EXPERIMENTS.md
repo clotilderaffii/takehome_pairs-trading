@@ -327,3 +327,27 @@ on most of the IS, especially after 1990. The signal loses in both regimes; weak
 not distinguishably so. Max drawdowns are not comparable across regimes (different lengths of stitched curves).
 Untested hypothesis noted for later: with a local β around 0.4 and a static hedge of 1.05, the static-β spread
 behaves largely like a position in AMD.
+
+---
+
+## 2026-10-10 13:59 CEST — Phase 3 addition: test of the "spread ≈ AMD position" hypothesis (IS only)
+
+**Type:** descriptive diagnostic, no backtest (IS backtest counter stays at 11). No OOS data loaded.
+**Code:** `pairs.stability.spread_leg_correlations` (+ test). **Notebook:** section 4 of `notebooks/03_stability.ipynb`.
+Also: the x-axis of `03b_rolling_adf_pvalue_is` now starts at the first data date (1980-03-17); PNG regenerated.
+
+Pearson correlation of the daily change of the static-β log spread (`log P_INTC − 1.047·log P_AMD`) with each
+leg's simple daily return:
+
+| period | days | corr with AMD | corr with INTC |
+|---|---|---|---|
+| All IS | 8272 | −0.754 | 0.208 |
+| 1980s | 2475 | −0.609 | 0.319 |
+| 1990s | 2528 | −0.802 | 0.295 |
+| 2000s | 2515 | −0.777 | 0.101 |
+| 2010–2012 | 754 | −0.892 | −0.157 |
+
+**Reading:** hypothesis confirmed in-sample. The static-β spread is mostly a short AMD position (correlation
+−0.75 overall, more negative after the 1980s), and only weakly linked to INTC. A long-spread trade is largely a
+bet against AMD; the Phase 2 signal behaves like a contrarian bet on one volatile stock rather than on the
+relationship.
