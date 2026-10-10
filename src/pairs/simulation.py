@@ -264,3 +264,172 @@ def load_or_simulate(
         pickle.dump({"params": asdict(params), "data": fingerprint, "table": table}, f)
     logger.info("Saved simulation table to %s", cache)
     return table
+
+
+def window_starts(n_rows: int, length: int, step: int = 252) -> list[int]:
+    """First rows of the windows of ``length`` rows starting every ``step`` rows that fit.
+
+    Parameters
+    ----------
+    n_rows : int
+        Number of rows of the path.
+    length : int
+        Window length in rows (trading days).
+    step : int, optional
+        Distance between consecutive window starts.
+
+    Returns
+    -------
+    list[int]
+        ``[0, step, 2·step, …]`` while ``start + length <= n_rows``.
+    """
+    assert 0 < length <= n_rows and step > 0
+    return list(range(0, n_rows - length + 1, step))
+
+
+def evaluate_window(
+    window: pd.DataFrame,
+    params: BootstrapParams,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> dict[str, float]:
+    """Fit, test and trade one window as someone fooled by that window would.
+
+    Parameters
+    ----------
+    window : pd.DataFrame
+        Prices of the window only (real or simulated).
+    params : BootstrapParams
+        Strategy parameters (entry, lookback, lag, cost) and ``is_warmup``.
+    ticker_a, ticker_b : str, optional
+        Legs A and B.
+
+    Returns
+    -------
+    dict[str, float]
+        ``beta`` (OLS on the window's log prices), ``eg_pvalue`` (Engle-Granger on the
+        window), ``sharpe_net`` (main configuration, evaluated from window row
+        ``is_warmup − 1``, starting flat).
+
+    Notes
+    -----
+    beta is estimated on the same window it is traded on: deliberate in-window look-ahead,
+    as pre-registered for the look-elsewhere analysis (18:37 CEST).
+    """
+    end = (window.index[-1] + pd.Timedelta(days=1)).date()
+    fit = fit_hedge_ratio(window, end=end, ticker_a=ticker_a, ticker_b=ticker_b)
+    tests = stationarity_tests(window, beta=fit.beta, end=end, ticker_a=ticker_a, ticker_b=ticker_b)
+    run = run_strategy(
+        window,
+        fit.beta,
+        entry=params.entry,
+        lookback=params.lookback,
+        end=end,
+        trade_from=window.index[params.is_warmup - 1].date(),
+        lag=params.lag,
+        cost_bps=params.cost_bps,
+        ticker_a=ticker_a,
+        ticker_b=ticker_b,
+    )
+    sharpe = performance_summary(run.daily, run.trades)["sharpe_net"]
+    return {"beta": fit.beta, "eg_pvalue": tests.eg_pvalue, "sharpe_net": sharpe}
+
+
+def look_elsewhere(
+    prices: pd.DataFrame,
+    params: BootstrapParams,
+    window_len: int,
+    step: int = 252,
+    n_paths: int | None = None,
+    expected_is_beta: pd.Series | None = None,
+    ticker_a: str = TICKER_A,
+    ticker_b: str = TICKER_B,
+) -> pd.DataFrame:
+    """Evaluate every window of every bootstrap path (same paths as :func:`simulate`).
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        Real aligned prices over the full history.
+    params : BootstrapParams
+        Bootstrap and strategy parameters (same seed and block as Phase 5).
+    window_len : int
+        Window length in trading days (that of the real window).
+    step : int, optional
+        Distance between window starts.
+    n_paths : int, optional
+        Number of paths (default ``params.n_paths``); the first ``n_paths`` of the sequence.
+    expected_is_beta : pd.Series, optional
+        Simulated-IS beta of each path from the Phase 5 table; if given, every regenerated
+        path is checked against it.
+    ticker_a, ticker_b : str, optional
+        Legs A and B.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per (path, window): ``path``, ``start_row``, ``beta``, ``eg_pvalue``,
+        ``sharpe_net``.
+
+    Raises
+    ------
+    AssertionError
+        If a regenerated path does not match the Phase 5 table.
+    """
+    prices = prices[[ticker_a, ticker_b]]
+    n = params.n_paths if n_paths is None else n_paths
+    rng = np.random.default_rng(params.seed)
+    starts = window_starts(len(prices), window_len, step)
+    rows: list[dict[str, float]] = []
+    for k in range(n):
+        path = bootstrap_path(prices, bootstrap_indices(len(prices) - 1, params.block, rng))
+        if expected_is_beta is not None:
+            split_date = path.index[params.split_index].date()
+            beta_is = fit_hedge_ratio(
+                path, end=split_date, ticker_a=ticker_a, ticker_b=ticker_b
+            ).beta
+            assert beta_is == float(expected_is_beta.iloc[k]), f"path {k} differs from Phase 5"
+        for s in starts:
+            res = evaluate_window(path.iloc[s : s + window_len], params, ticker_a, ticker_b)
+            rows.append({"path": float(k), "start_row": float(s), **res})
+        if (k + 1) % 25 == 0:
+            logger.info("Look-elsewhere: %d / %d paths", k + 1, n)
+    table = pd.DataFrame(rows).astype({"path": int, "start_row": int})
+    return table
+
+
+def look_elsewhere_summary(
+    windows: pd.DataFrame, real_pvalue: float, real_sharpe: float
+) -> dict[str, float]:
+    """Pre-registered outputs (a)-(d) of the look-elsewhere analysis.
+
+    Parameters
+    ----------
+    windows : pd.DataFrame
+        Output of :func:`look_elsewhere`.
+    real_pvalue, real_sharpe : float
+        Engle-Granger p-value and net Sharpe of the real window.
+
+    Returns
+    -------
+    dict[str, float]
+        ``a_share_windows_p_lt_005``, ``b_share_paths_any_p_lt_005``,
+        ``c_share_paths_any_as_good_as_real``, ``d_best_sharpe_median``,
+        ``d_best_sharpe_p5``, ``d_best_sharpe_p95``, ``d_real_percentile_among_best``
+        (shares and percentiles in %), plus ``n_paths`` and ``n_windows``.
+    """
+    by_path = windows.groupby("path")
+    as_good = (windows["eg_pvalue"] <= real_pvalue) & (windows["sharpe_net"] >= real_sharpe)
+    best = by_path["sharpe_net"].max()
+    return {
+        "n_paths": float(windows["path"].nunique()),
+        "n_windows": float(len(windows)),
+        "a_share_windows_p_lt_005": 100 * float((windows["eg_pvalue"] < 0.05).mean()),
+        "b_share_paths_any_p_lt_005": 100 * float((by_path["eg_pvalue"].min() < 0.05).mean()),
+        "c_share_paths_any_as_good_as_real": 100
+        * float(as_good.groupby(windows["path"]).any().mean()),
+        "d_best_sharpe_median": float(best.median()),
+        "d_best_sharpe_p5": float(best.quantile(0.05)),
+        "d_best_sharpe_p95": float(best.quantile(0.95)),
+        "d_real_percentile_among_best": 100 * float((best <= real_sharpe).mean()),
+    }

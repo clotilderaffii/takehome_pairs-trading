@@ -998,3 +998,79 @@ percentile), so the IS profit is not evidence of a long-run relationship. The re
 percentile: worse than almost all no-relationship paths, consistent with a persistent trend in the spread (2025–2026)
 longer than the 20-day blocks. Diagnostics decided after seeing the results; percentiles are descriptive; nothing was
 changed in the strategy.
+
+---
+
+# INTC/AMD: look-elsewhere analysis
+
+## 2026-10-10 18:37 CEST — Pre-registration: look-elsewhere effect on INTC/AMD (written BEFORE computing)
+
+**Scope:** INTC/AMD only; nothing of the KO/PEP appendix is touched. This is a simulation, not a strategy attempt:
+INTC/AMD counters stay at **14 IS backtests and 2 OOS accesses**; INTC/AMD **simulation runs: 1 → 2** once executed.
+
+**Disclosure.** The window 1997-01-01 … 2004-12-31 was chosen **a posteriori**, by looking at the INTC/AMD price charts
+(the user's idea, prompted by the impression that the two stocks looked linked in that period). The purpose is to
+measure how easily such a window appears **by chance** when one searches a long history for it, not to propose it as a
+trading period.
+
+**Real window (INTC/AMD):** prices from 1997-01-01 to 2004-12-31 only. On this window alone: β by OLS on the window's
+log prices (deliberate look-ahead within the window: it is what someone fooled by the window would do), Engle–Granger
+p-value (same `stationarity_tests` function), and the net Sharpe of the main configuration (e = 2.0, L = 60, `shift(1)`,
+5 bp per leg, exit at zero, direct flip, no stop-loss), with prices restricted to the window and evaluated from the
+window's first day with an L = 120 z-score (window row 119), starting flat.
+
+**Null world:** the same 500 paths of the INTC/AMD Phase 5 bootstrap, regenerated with the same seed (2026) and block
+(20); they are checked against `data/processed/simulation_paths.pkl` (the simulated-IS β recomputed on every path must
+equal the stored one). On each path: windows with the **same length in trading days as the real window**, starting at
+rows 0, 252, 504, … as long as the window fits in the path; on each window exactly the same procedure (β in the window,
+Engle–Granger, net Sharpe from window row 119).
+
+**Outputs:**
+(a) share of single windows with Engle–Granger p < 0.05 (expected ≈ 5%);
+(b) share of paths containing **at least one** window with p < 0.05;
+(c) share of paths containing at least one window with p ≤ real p **and** Sharpe ≥ real Sharpe (same window);
+(d) distribution of the best window's net Sharpe per path, with the real window's value.
+
+**Run time:** if the estimate exceeds 20 minutes, only the first 200 paths are used (same seed, so they are the first
+200 of the 500) and this is declared. Checkpoint: `data/processed/look_elsewhere_windows.pkl`.
+
+## 2026-10-10 19:06 CEST — Result: look-elsewhere effect on INTC/AMD (design as pre-registered at 18:37)
+
+**Counters:** INTC/AMD IS backtests 14 and OOS accesses 2 (unchanged); INTC/AMD **simulation runs: 2** (Phase 5; this
+look-elsewhere run). KO/PEP appendix untouched.
+**Run time and paths:** estimated ≈ 45 min for 500 paths (0.137 s per window × 39 windows × 500) > 20 min, so **the first
+200 paths were used**, as pre-registered. Actual run: 200 paths × 39 windows = 7,800 windows of **2,013 trading days**
+(the real window's length), starts every 252 rows, 1,336 s (`scripts/run_look_elsewhere.py`). All 200 regenerated paths
+matched the Phase 5 table (simulated-IS β identical on every path; checked inside the run).
+**Code:** new functions `window_starts`, `evaluate_window`, `look_elsewhere`, `look_elsewhere_summary` in
+`src/pairs/simulation.py` (existing functions unchanged); 4 new tests in `tests/test_simulation.py` (99 tests in total).
+**Notebook:** new section "Look-elsewhere effect" at the end of `notebooks/05_simulation.ipynb`. **Figures:**
+`reports/figures/05d_lookelsewhere_spread_1997_2004`, `05e_lookelsewhere_best_window_sharpe` (.png/.html).
+
+**Control that no existing result changed.** (1) Before computing, notebooks 00–06 re-executed on a temporary copy: all
+22 PNGs byte-identical, all embedded images identical, all text outputs identical except in `02_signal`, where one cell's
+log lines (stderr) and printed line (stdout) arrived in a different order; compared separately per stream, all 29 cells of
+`02_signal` are identical (no number changed). (2) After adding the section, `05_simulation.ipynb` was executed in place:
+its 15 pre-existing cells are identical to the committed version (source, outputs per stream, results, images); PNGs
+05a–05c byte-identical; the three HTML files differ only in Plotly's random element ids. Two execution attempts failed
+before writing the notebook with a transient Windows file lock on a PNG (`OSError: [Errno 22]`, the same issue seen
+earlier today); the files written meanwhile were byte-identical. One more execution was done only to widen the x-axis of
+the 05e histogram (the real-value line sat on the axis edge); all outputs were re-checked afterwards.
+
+**Real window 1997-01-02 … 2004-12-31 (chosen a posteriori):** in-window β = 0.4799 (R² 0.406), Engle–Granger
+p = **0.5118**, net Sharpe of the main configuration with the in-window β = **0.222**.
+
+| output | value |
+|---|---|
+| (a) single null windows with Engle–Granger p < 0.05 | **5.8%** (of 7,800) |
+| (b) null paths with at least one window p < 0.05 | **78.5%** |
+| (c) null paths with a window as good as the real one (p ≤ 0.5118 and Sharpe ≥ 0.222) | **99.5%** |
+| (d) best-window net Sharpe per null path: median [5th, 95th pct] | **0.80 [0.48, 1.17]** |
+| (d) percentile of the real Sharpe among the best windows | **0.0%** |
+
+**Reading:** the window picked by eye is not cointegrated (p = 0.51) and its in-window Sharpe (0.22) is below the best
+window of every null path. In a world without a stable relationship, a single window passes the test about 5% of the time,
+but searching ~39 windows of a history this long finds at least one "cointegrated" window in 78.5% of histories, and the
+best window typically shows a net Sharpe around 0.8. The impression of a 1997–2004 link is what chance routinely produces
+when a long history is searched. Caveats: 200 of 500 paths; starts every 252 days (a finer search would raise (b) and
+(d)); the null is the Phase 5 bootstrap world.

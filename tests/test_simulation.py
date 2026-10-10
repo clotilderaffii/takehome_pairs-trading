@@ -110,3 +110,61 @@ def test_load_or_simulate_uses_matching_cache_only(
 
     with pytest.raises(AssertionError, match="should have loaded"):
         load_or_simulate(prices, BootstrapParams(n_paths=2, split_index=350, seed=12), cache)
+
+
+def test_window_starts() -> None:
+    from pairs.simulation import window_starts
+
+    assert window_starts(1000, 300, 252) == [0, 252, 504]
+    assert window_starts(300, 300, 252) == [0]
+
+
+def test_evaluate_window_matches_manual_pipeline() -> None:
+    from pairs.simulation import evaluate_window
+
+    window = make_synthetic_pair(400, seed=7, mean_reverting=True)
+    out = evaluate_window(window, BootstrapParams())
+    end = date(2100, 1, 1)
+    fit = fit_hedge_ratio(window, end=end)
+    run = run_strategy(
+        window, fit.beta, entry=2.0, lookback=60, end=end, trade_from=window.index[119].date()
+    )
+    assert out["beta"] == pytest.approx(fit.beta)
+    assert out["sharpe_net"] == pytest.approx(
+        performance_summary(run.daily, run.trades)["sharpe_net"]
+    )
+    assert 0 <= out["eg_pvalue"] <= 1
+
+
+def test_look_elsewhere_regenerates_the_phase5_paths() -> None:
+    from pairs.simulation import look_elsewhere, simulate
+
+    prices = make_synthetic_pair(700, seed=8, mean_reverting=False)
+    params = BootstrapParams(n_paths=3, split_index=490, seed=13)
+    table5 = simulate(prices, params)
+    windows = look_elsewhere(prices, params, window_len=300, expected_is_beta=table5["beta"])
+    assert sorted(windows["path"].unique()) == [0, 1, 2]
+    assert windows.groupby("path").size().tolist() == [2, 2, 2]  # starts 0 and 252
+    with pytest.raises(AssertionError, match="differs from Phase 5"):
+        look_elsewhere(prices, params, window_len=300, expected_is_beta=table5["beta"] + 1.0)
+
+
+def test_look_elsewhere_summary_by_hand() -> None:
+    from pairs.simulation import look_elsewhere_summary
+
+    windows = pd.DataFrame(
+        {
+            "path": [0, 0, 1, 1],
+            "start_row": [0, 252, 0, 252],
+            "eg_pvalue": [0.01, 0.50, 0.30, 0.04],
+            "sharpe_net": [0.2, 1.5, 0.1, 0.9],
+        }
+    )
+    s = look_elsewhere_summary(windows, real_pvalue=0.05, real_sharpe=1.0)
+    assert s["a_share_windows_p_lt_005"] == pytest.approx(50.0)
+    assert s["b_share_paths_any_p_lt_005"] == pytest.approx(100.0)
+    assert s["c_share_paths_any_as_good_as_real"] == pytest.approx(
+        0.0
+    )  # no window with p<=0.05 and SR>=1
+    assert s["d_best_sharpe_median"] == pytest.approx(1.2)
+    assert s["d_real_percentile_among_best"] == pytest.approx(50.0)  # best SRs 1.5 and 0.9
